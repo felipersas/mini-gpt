@@ -9,15 +9,17 @@ model:
   d_model: 256
   num_heads: 4
   num_layers: 8
-  dropout: 0.1
+  # 0.1 dava overfitting mais forte (gap validação-treino +0.35, melhor val 1.427); 0.2 reduz o
+  # gap pra +0.26 e leva a melhor validação a 1.396.
+  dropout: 0.2
   tie_weights: true
 
 training:
   batch_size: 30
   # Em decimal: o PyYAML lê "1e-3" como string.
   learning_rate: 0.001
-  # Igual ao máximo: lr constante depois do warmup. Na comparação da Fase 11, decair cedo
-  # atrasou o treino (docs/11-training.md).
+  # Igual ao máximo: lr constante depois do warmup. Na comparação em docs/11-training.md, decair
+  # cedo atrasou o treino.
   min_learning_rate: 0.001
   warmup_steps: 100
   epochs: 30
