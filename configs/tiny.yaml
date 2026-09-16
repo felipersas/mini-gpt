@@ -1,5 +1,7 @@
 data:
-  corpus_path: corpus/dom_casmurro.txt
+  # 4 romances de Machado de Assis (Dom Casmurro, Memórias Póstumas de Brás Cubas, Quincas Borba,
+  # Esaú e Jacó), gerado por scripts/prepare_corpus.py.
+  corpus_path: corpus/machado_de_assis.txt
   val_fraction: 0.1
   stride: 128
 
@@ -27,5 +29,5 @@ training:
   gradient_clip: 1.0
   seed: 42
   log_every: 100
-  # Além do latest.pt, salvo ao fim de toda época (82 passos).
+  # Além do latest.pt, salvo ao fim de toda época.
   checkpoint_every: 1000
