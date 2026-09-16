@@ -8,14 +8,14 @@ import torch
 
 from config import Config, ModelConfig, config_from_dict
 from model.gpt import GPT
-from tokenizer import CharTokenizer, Vocab
+from tokenizer import BPETokenizer, Vocab
 from training.trainer import EpochRecord, TrainingProgress
 
 
 def save_checkpoint(
     path: str | Path,
     model: GPT,
-    tokenizer: CharTokenizer,
+    tokenizer: BPETokenizer,
     *,
     config: Config | None = None,
     optimizer: torch.optim.Optimizer | None = None,
@@ -32,6 +32,7 @@ def save_checkpoint(
     checkpoint: dict[str, Any] = {
         "model_config": asdict(model.config),  # hiperparâmetros da arquitetura
         "vocab": tokenizer.vocab.id_to_token,  # a ordem dos tokens define os IDs
+        "merges": tokenizer.merges,  # ordem de prioridade dos merges do BPE
         "model_state": model.state_dict(),  # todos os pesos, por nome
     }
     if progress is not None:
@@ -57,15 +58,16 @@ def read_checkpoint(path: str | Path) -> dict[str, Any]:
     return torch.load(path, map_location="cpu", weights_only=True)
 
 
-def model_from_checkpoint(checkpoint: dict[str, Any]) -> tuple[GPT, CharTokenizer]:
-    tokenizer = CharTokenizer(Vocab(checkpoint["vocab"]))
+def model_from_checkpoint(checkpoint: dict[str, Any]) -> tuple[GPT, BPETokenizer]:
+    merges = [tuple(pair) for pair in checkpoint["merges"]]
+    tokenizer = BPETokenizer(Vocab(checkpoint["vocab"]), merges)
     model = GPT(ModelConfig(**checkpoint["model_config"]), vocab_size=tokenizer.vocab_size)
     model.load_state_dict(checkpoint["model_state"])
     model.eval()
     return model, tokenizer
 
 
-def load_checkpoint(path: str | Path) -> tuple[GPT, CharTokenizer]:
+def load_checkpoint(path: str | Path) -> tuple[GPT, BPETokenizer]:
     """Recria o tokenizer e o modelo, carrega os pesos e deixa o modelo em modo de inferência."""
     return model_from_checkpoint(read_checkpoint(path))
 
@@ -74,7 +76,7 @@ def load_checkpoint(path: str | Path) -> tuple[GPT, CharTokenizer]:
 class TrainingCheckpoint:
     config: Config
     model: GPT
-    tokenizer: CharTokenizer
+    tokenizer: BPETokenizer
     optimizer_state: dict[str, Any]
     progress: TrainingProgress
 

@@ -4,8 +4,10 @@ data:
   corpus_path: corpus/machado_de_assis.txt
   val_fraction: 0.1
   stride: 128
+  # Alvo do BPE: ~200 caracteres de alfabeto + especiais + 3.9 mil merges. Comprime a ~2,3
+  # caracteres/token neste corpus, então context_length: 128 passa a cobrir ~290 caracteres.
+  vocab_size: 4096
 
-# vocab_size não fica aqui: é definido pelo tokenizer a partir do corpus.
 model:
   context_length: 128
   d_model: 256

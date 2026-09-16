@@ -10,7 +10,7 @@ from config import load_config
 from data.loader import create_dataloader, split_train_val
 from device import describe, select_device
 from model import GPT
-from tokenizer import CharTokenizer
+from tokenizer import BPETokenizer
 from training.checkpoint import load_training_checkpoint, save_checkpoint
 from training.metrics import bits_per_token, perplexity, save_history
 from training.trainer import TrainingProgress, configure_optimizer, evaluate, train
@@ -60,7 +60,7 @@ def main() -> None:
         )
     text = corpus_path.read_text(encoding="utf-8")
 
-    tokenizer = CharTokenizer.from_text(text)
+    tokenizer = BPETokenizer.train(text, vocab_size=config.data.vocab_size)
     if resumed and resumed.tokenizer.vocab.id_to_token != tokenizer.vocab.id_to_token:
         raise SystemExit("O corpus mudou desde o checkpoint: os IDs não correspondem aos pesos.")
     ids = torch.tensor(tokenizer.encode(text), dtype=torch.long)
@@ -189,7 +189,7 @@ def main() -> None:
     print(
         f"\nfim: loss de validação {final.val_loss:.3f}"
         f" | perplexidade {perplexity(final.val_loss):.2f}"
-        f" | {bits_per_token(final.val_loss):.3f} bits/caractere | {final.seconds:.0f} s"
+        f" | {bits_per_token(final.val_loss):.3f} bits/token | {final.seconds:.0f} s"
     )
     if final.train_eval_loss is not None:
         print(

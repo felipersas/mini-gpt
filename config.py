@@ -11,11 +11,14 @@ class DataConfig:
     corpus_path: str  # relativo à raiz do projeto
     val_fraction: float
     stride: int
+    # Alvo do treino do BPE (tokenizer/bpe.py): especiais + alfabeto + merges. O vocab_size real
+    # pode sair um pouco menor se o corpus não tiver pares suficientes para chegar no alvo.
+    vocab_size: int
 
 
 @dataclass
 class ModelConfig:
-    """Hiperparâmetros da arquitetura. O vocab_size vem do tokenizer."""
+    """Hiperparâmetros da arquitetura. O vocab_size do modelo vem do tokenizer treinado."""
 
     context_length: int
     d_model: int
