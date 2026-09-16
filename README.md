@@ -7,13 +7,13 @@ entender exatamente o que acontece dentro de um modelo de linguagem quando ele r
 Cada componente (tokenizer, attention, feed-forward, training loop, checkpoints, suporte a
 GPU...) foi construído, testado e documentado separadamente, com a matemática explicada passo a
 passo e números reais medidos no próprio modelo. Treina em CPU, CUDA ou MPS (GPU da Apple), sobre
-um corpus em português (*Dom Casmurro*, de Machado de Assis).
+um corpus em português: quatro romances de Machado de Assis (domínio público).
 
 ```
 $ uv run python inference.py "Capitú"
-Capitú se falou do seminario, com o silencio e dei os seus seus ares, certamente a sua mãe e
-confessar-lhe que elles não deixei medicina. Desconfiado em casa, ou como signal velha não então
-ou mulher para aqui este cadava-lhe perguntou-me...
+Capitú erguia a opinião de fim de prender outras palavras e fui ver a possibilidade dos seus meus
+sujeitos. A mãe de Sophia não era conhecida de mim mesmo especial e a palavra do raciocinio. O
+mais foi para elle se tirar a explicação do poder, e fitava-a a si mesma...
 ```
 
 A visão de ponta a ponta, com os shapes de cada etapa, está em
@@ -67,8 +67,9 @@ uv run python train.py --resume checkpoints/latest.pt --epochs 40  # treina mais
 uv run python train.py --device cpu                                # força CPU (padrão: auto)
 ```
 
-O corpus (*Dom Casmurro*, Machado de Assis, 1899, domínio público) já está em
-`corpus/dom_casmurro.txt`. Para regenerá-lo a partir do Project Gutenberg:
+O corpus (*Dom Casmurro*, *Memórias Póstumas de Brás Cubas*, *Quincas Borba* e *Esaú e Jacó*, de
+Machado de Assis, domínio público) já está em `corpus/machado_de_assis.txt`. Para regenerá-lo a
+partir do Project Gutenberg:
 
 ```bash
 uv run python scripts/prepare_corpus.py
@@ -85,7 +86,7 @@ uv export --no-dev --no-hashes --format requirements-txt -o requirements.txt
 ```text
 config.py            dataclasses da configuração + load_config()
 configs/tiny.yaml    configuração inicial (d_model=256, 4 heads, 8 layers)
-corpus/              texto de treino (Dom Casmurro, limpo)
+corpus/              texto de treino (4 romances de Machado de Assis, limpos)
 scripts/             download e limpeza do corpus
 tokenizer/           texto <-> IDs
 data/                janelas (x, y), split treino/validação, DataLoaders
