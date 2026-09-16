@@ -1,0 +1,35 @@
+[project]
+name = "mini-gpt"
+version = "0.1.0"
+description = "Implementação educacional de um GPT decoder-only em PyTorch"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.3",
+    "pyyaml>=6.0.3",
+    "torch>=2.14.0",
+]
+
+[tool.uv]
+# Não é um pacote instalável: os módulos (tokenizer/, model/, ...) são
+# importados a partir da raiz do projeto.
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# O ruff também formata blocos de código em Markdown; os docs ficam como foram escritos.
+extend-exclude = ["docs"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.16.7",
+]

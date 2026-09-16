@@ -1,0 +1,29 @@
+data:
+  corpus_path: corpus/dom_casmurro.txt
+  val_fraction: 0.1
+  stride: 128
+
+# vocab_size não fica aqui: é definido pelo tokenizer a partir do corpus.
+model:
+  context_length: 128
+  d_model: 256
+  num_heads: 4
+  num_layers: 8
+  dropout: 0.1
+  tie_weights: true
+
+training:
+  batch_size: 30
+  # Em decimal: o PyYAML lê "1e-3" como string.
+  learning_rate: 0.001
+  # Igual ao máximo: lr constante depois do warmup. Na comparação da Fase 11, decair cedo
+  # atrasou o treino (docs/11-training.md).
+  min_learning_rate: 0.001
+  warmup_steps: 100
+  epochs: 30
+  weight_decay: 0.01
+  gradient_clip: 1.0
+  seed: 42
+  log_every: 100
+  # Além do latest.pt, salvo ao fim de toda época (82 passos).
+  checkpoint_every: 1000
