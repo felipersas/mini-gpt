@@ -6,26 +6,25 @@ Rode com: uv run python -m experiments.e18_bpe_tokenizer
 import time
 from pathlib import Path
 
+from config import load_config
 from generation.generate import trim_trailing_partial_word
 from tokenizer import BPETokenizer, CharTokenizer
 from tokenizer.bpe import _WORD_PATTERN
 
 ROOT = Path(__file__).resolve().parent.parent
-CORPUS = ROOT / "corpus" / "machado_de_assis.txt"
-VOCAB_SIZE = 4096
 
 
 def section(title: str) -> None:
     print(f"\n{'=' * 80}\n{title}\n{'=' * 80}")
 
 
-def train_tokenizer(text: str) -> BPETokenizer:
+def train_tokenizer(text: str, vocab_size: int) -> BPETokenizer:
     section("1. Treinando o BPE no corpus real")
     start = time.perf_counter()
-    tok = BPETokenizer.train(text, vocab_size=VOCAB_SIZE)
+    tok = BPETokenizer.train(text, vocab_size=vocab_size)
     elapsed = time.perf_counter() - start
     alphabet = len({c for c in text})
-    print(f"  {len(text):,} caracteres | alvo vocab_size {VOCAB_SIZE} | treino em {elapsed:.1f}s")
+    print(f"  {len(text):,} caracteres | alvo vocab_size {vocab_size} | treino em {elapsed:.1f}s")
     print(f"  alfabeto: {alphabet} caracteres | merges aprendidos: {len(tok.merges)}")
     print(f"  vocab_size real: {tok.vocab_size}")
     print("\n  primeiros 10 merges (os pares mais frequentes do corpus inteiro):")
@@ -105,13 +104,16 @@ def why_trimming_matters(tok: BPETokenizer) -> None:
 
 
 def main() -> None:
-    if not CORPUS.is_file():
+    config = load_config(ROOT / "configs" / "tiny.yaml")
+    corpus = ROOT / config.data.corpus_path
+    if not corpus.is_file():
         raise SystemExit(
-            f"Corpus não encontrado: {CORPUS}\nRode: uv run python scripts/prepare_corpus.py"
+            f"Corpus não encontrado: {corpus}\nRode: uv run python scripts/prepare_corpus.py"
+            " e uv run --group data python scripts/prepare_wikipedia_corpus.py"
         )
-    text = CORPUS.read_text(encoding="utf-8")
+    text = corpus.read_text(encoding="utf-8")
 
-    tok = train_tokenizer(text)
+    tok = train_tokenizer(text, config.data.vocab_size)
     common_words_become_one_token(tok)
     punctuation_never_glues_to_the_word(tok)
     char_tok = CharTokenizer.from_text(text)
