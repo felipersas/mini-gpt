@@ -4,7 +4,8 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-checkpoints/
-*.pt
+checkpoints/*
+!checkpoints/best.pt
+!checkpoints/latest.pt
 
 .claude/
