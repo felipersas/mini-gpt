@@ -16,7 +16,11 @@ sujeitos. A mãe de Sophia não era conhecida de mim mesmo especial e a palavra 
 mais foi para elle se tirar a explicação do poder, e fitava-a a si mesma...
 ```
 
-A visão de ponta a ponta, com os shapes de cada etapa, está em
+## Arquitetura
+
+<img src="docs/images/architecture.svg" alt="Diagrama da arquitetura do Mini-GPT: embeddings, 8 blocos transformer com attention e feed-forward, e a cabeça de saída" width="720">
+
+A visão de ponta a ponta, com os shapes de cada etapa e um diagrama Mermaid navegável, está em
 [docs/architecture.md](docs/architecture.md). Para entender as letras e símbolos das fórmulas,
 comece por [docs/00-notacao.md](docs/00-notacao.md). Cada componente tem seu próprio documento em
 `docs/`, listados na seção [Componentes](#componentes) abaixo.

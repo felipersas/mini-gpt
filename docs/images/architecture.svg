@@ -1,0 +1,133 @@
+<svg width="1000" height="1550" viewBox="0 0 1000 1550" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif">
+  <rect x="0" y="0" width="1000" height="1550" fill="white"/>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="black"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="40" y="70" font-size="52" font-weight="bold" fill="black">Mini-GPT</text>
+  <text x="40" y="105" font-size="22" fill="#444">6.371.840 parâmetros</text>
+
+  <!-- Outer container (embeddings through LM head) -->
+  <rect x="150" y="230" width="480" height="1160" rx="24" fill="#d9d9d9" stroke="black" stroke-width="2"/>
+
+  <!-- Repeated block container -->
+  <rect x="250" y="560" width="340" height="600" rx="20" fill="#a9c6e0" stroke="black" stroke-width="2"/>
+
+  <!-- "8x" repeat-count bracket, in the margin left of the blue block -->
+  <path d="M 225 575 L 205 575 L 205 1145 L 225 1145" fill="none" stroke="#1f5c8b" stroke-width="3"/>
+  <text x="205" y="555" font-size="26" font-weight="bold" fill="#1f5c8b" text-anchor="middle">8×</text>
+
+  <!-- row 0: Texto tokenizado (outside container) -->
+  <rect x="290" y="1450" width="260" height="46" rx="10" fill="white" stroke="black" stroke-width="2"/>
+  <text x="420" y="1478" font-size="18" text-anchor="middle">Texto tokenizado</text>
+  <line x1="420" y1="1450" x2="420" y2="1360" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- row 1: Token embedding layer -->
+  <rect x="290" y="1314" width="260" height="46" rx="10" fill="white" stroke="black" stroke-width="2"/>
+  <text x="420" y="1342" font-size="18" text-anchor="middle">Token embedding layer</text>
+  <line x1="420" y1="1314" x2="420" y2="1274" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- row 2: Positional embedding layer -->
+  <rect x="290" y="1228" width="260" height="46" rx="10" fill="white" stroke="black" stroke-width="2"/>
+  <text x="420" y="1256" font-size="18" text-anchor="middle">Positional embedding layer</text>
+  <line x1="420" y1="1228" x2="420" y2="1188" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- row 3: Dropout (outer) -->
+  <rect x="290" y="1142" width="260" height="46" rx="10" fill="white" stroke="black" stroke-width="2"/>
+  <text x="420" y="1170" font-size="18" text-anchor="middle">Dropout</text>
+  <line x1="420" y1="1142" x2="420" y2="1102" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- row 4: LayerNorm 1 -->
+  <rect x="290" y="1056" width="260" height="46" rx="10" fill="white" stroke="black" stroke-width="2"/>
+  <text x="420" y="1084" font-size="18" text-anchor="middle">LayerNorm ln_1</text>
+  <line x1="420" y1="1056" x2="420" y2="1016" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- row 5: Multi-Head Attention -->
+  <rect x="290" y="970" width="260" height="46" rx="10" fill="#4a4a4a" stroke="black" stroke-width="2"/>
+  <text x="420" y="998" font-size="17" text-anchor="middle" fill="white">Multi-Head Attention</text>
+  <line x1="420" y1="970" x2="420" y2="930" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- row 6: Dropout inner1 -->
+  <rect x="290" y="884" width="260" height="46" rx="10" fill="white" stroke="black" stroke-width="2"/>
+  <text x="420" y="912" font-size="18" text-anchor="middle">Dropout</text>
+  <line x1="420" y1="884" x2="420" y2="844" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- residual 1: branch before LN1, loop right into circle -->
+  <path d="M 420 1102 L 570 1102 L 570 821 L 462 821" fill="none" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+  <!-- circle residual 1 -->
+  <circle cx="420" cy="821" r="21" fill="white" stroke="black" stroke-width="2"/>
+  <text x="420" y="829" font-size="22" text-anchor="middle">+</text>
+  <line x1="420" y1="844" x2="420" y2="842" stroke="black" stroke-width="2"/>
+  <line x1="420" y1="800" x2="420" y2="758" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- row 8: LayerNorm 2 -->
+  <rect x="290" y="712" width="260" height="46" rx="10" fill="white" stroke="black" stroke-width="2"/>
+  <text x="420" y="740" font-size="18" text-anchor="middle">LayerNorm ln_2</text>
+  <line x1="420" y1="712" x2="420" y2="672" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- row 9: Feed Forward -->
+  <rect x="290" y="626" width="260" height="46" rx="10" fill="#bfbfbf" stroke="black" stroke-width="2"/>
+  <text x="420" y="654" font-size="18" text-anchor="middle">Feed Forward</text>
+  <line x1="420" y1="626" x2="420" y2="586" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- row 10: Dropout inner2 -->
+  <rect x="290" y="540" width="260" height="46" rx="10" fill="white" stroke="black" stroke-width="2"/>
+  <text x="420" y="568" font-size="18" text-anchor="middle">Dropout</text>
+  <line x1="420" y1="540" x2="420" y2="500" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- residual 2: branch before LN2, loop right into circle -->
+  <path d="M 420 758 L 570 758 L 570 477 L 462 477" fill="none" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+  <!-- circle residual 2 -->
+  <circle cx="420" cy="477" r="21" fill="white" stroke="black" stroke-width="2"/>
+  <text x="420" y="485" font-size="22" text-anchor="middle">+</text>
+  <line x1="420" y1="500" x2="420" y2="498" stroke="black" stroke-width="2"/>
+  <line x1="420" y1="456" x2="420" y2="414" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- row 12: LayerNorm final -->
+  <rect x="290" y="368" width="260" height="46" rx="10" fill="white" stroke="black" stroke-width="2"/>
+  <text x="420" y="396" font-size="18" text-anchor="middle">LayerNorm final</text>
+  <line x1="420" y1="368" x2="420" y2="328" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- row 13: Linear output layer (LM head) -->
+  <rect x="290" y="282" width="260" height="46" rx="10" fill="white" stroke="black" stroke-width="2"/>
+  <text x="420" y="310" font-size="18" text-anchor="middle">Linear output layer</text>
+  <line x1="420" y1="282" x2="420" y2="200" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- callout: vocabulary size -->
+  <line x1="440" y1="190" x2="610" y2="150" stroke="black" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="615" y="145" font-size="20" font-weight="bold" fill="black">Vocabulário de <tspan fill="#1f5c8b">112</tspan> tokens</text>
+
+  <!-- callout: heads -->
+  <line x1="550" y1="993" x2="700" y2="960" stroke="black" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="705" y="965" font-size="20" font-weight="bold" fill="black"><tspan fill="#1f5c8b">4</tspan> heads</text>
+
+  <!-- feed forward internal detail box -->
+  <rect x="700" y="580" width="260" height="220" rx="16" fill="#e8e8e8" stroke="black" stroke-width="2" stroke-dasharray="6,4"/>
+  <rect x="740" y="720" width="180" height="42" rx="8" fill="white" stroke="black" stroke-width="2"/>
+  <text x="830" y="746" font-size="16" text-anchor="middle">Linear layer</text>
+  <line x1="830" y1="720" x2="830" y2="690" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="740" y="648" width="180" height="42" rx="8" fill="white" stroke="black" stroke-width="2"/>
+  <text x="830" y="674" font-size="16" text-anchor="middle">GELU activation</text>
+  <line x1="830" y1="648" x2="830" y2="618" stroke="black" stroke-width="2" marker-end="url(#arrow)"/>
+  <rect x="740" y="576" width="180" height="42" rx="8" fill="white" stroke="black" stroke-width="2"/>
+  <text x="830" y="602" font-size="16" text-anchor="middle">Linear layer</text>
+  <line x1="700" y1="649" x2="550" y2="649" stroke="black" stroke-width="2" stroke-dasharray="6,4"/>
+
+  <!-- callout: hidden dim -->
+  <text x="700" y="825" font-size="20" font-weight="bold" fill="black">Camada oculta de <tspan fill="#1f5c8b">1.024</tspan></text>
+
+  <!-- callout: context length -->
+  <line x1="550" y1="1251" x2="700" y2="1230" stroke="black" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="705" y="1225" font-size="20" font-weight="bold" fill="black">Contexto de <tspan fill="#1f5c8b">128</tspan> tokens,</text>
+  <text x="705" y="1250" font-size="20" font-weight="bold" fill="black">posição absoluta aprendida</text>
+
+  <!-- callout: embedding dim -->
+  <line x1="550" y1="1337" x2="700" y2="1400" stroke="black" stroke-width="2" stroke-dasharray="6,4"/>
+  <text x="705" y="1420" font-size="20" font-weight="bold" fill="black">Dimensão de embedding <tspan fill="#1f5c8b">256</tspan></text>
+
+  <!-- tagline -->
+  <text x="420" y="1530" font-size="22" text-anchor="middle" font-style="italic" fill="#333">"Capitú"</text>
+</svg>
