@@ -1,7 +1,7 @@
 data:
-  # 4 romances de Machado de Assis (Dom Casmurro, Memórias Póstumas de Brás Cubas, Quincas Borba,
-  # Esaú e Jacó), gerado por scripts/prepare_corpus.py.
-  corpus_path: corpus/machado_de_assis.txt
+  # 4 romances de Machado de Assis (scripts/prepare_corpus.py) + um recorte de ~15M caracteres
+  # da Wikipedia em português (scripts/prepare_wikipedia_corpus.py), ~16,7M caracteres no total.
+  corpus_path: corpus/machado_e_wikipedia.txt
   val_fraction: 0.1
   stride: 128
 
@@ -24,7 +24,9 @@ training:
   # cedo atrasou o treino.
   min_learning_rate: 0.001
   warmup_steps: 100
-  epochs: 30
+  # Corpus ~10x maior desde a Wikipedia: cada época já cobre bem mais tokens únicos, então
+  # menos épocas bastam. 15 fica perto da razão tokens/parâmetro do Chinchilla (docs/02-dataset.md).
+  epochs: 15
   weight_decay: 0.01
   gradient_clip: 1.0
   seed: 42
