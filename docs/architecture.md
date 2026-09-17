@@ -53,10 +53,84 @@ Aqui você encontra:
 | performance: attention eficiente (SDPA) e mixed precision | ✅ | [17](17-performance.md) |
 
 **Onde o projeto está.** O pipeline roda em CPU, CUDA ou MPS: tokenizer → janelas → GPT com
-**820.096 parâmetros** (832.512 sem weight tying, na configuração original de 4 camadas) → loss →
-treino → avaliação → geração. O treino de 30 épocas leva a loss de validação a 1,452 (perplexidade
-4,27) e salva checkpoints que servem tanto para gerar texto quanto para continuar o treino do ponto
-exato em que parou.
+**6.371.840 parâmetros** (`tiny.yaml`: 8 blocos, `d_model` 256) → loss → treino → avaliação →
+geração, treinado sobre 4 romances de Machado de Assis. Um treino de 60 épocas leva a melhor loss
+de validação a 1,222 (perplexidade 3,39) já na época 34 — depois disso o modelo só decora o treino
+([12-overfitting.md](12-overfitting.md)), e `best.pt` fica travado nessa época automaticamente. Os
+checkpoints servem tanto para gerar texto quanto para continuar o treino do ponto exato em que
+parou.
+
+---
+
+## Diagrama da arquitetura
+
+O mesmo [fluxo de dados](#fluxo-de-dados) de baixo, como um grafo: cada caixa é uma operação, cada
+seta carrega um tensor. O bloco tracejado se repete $L = 8$ vezes, sempre com os mesmos dois
+padrões — `LayerNorm` lendo o residual stream, a subcamada escrevendo, a escrita **somada** de
+volta (não substituindo nada). É o mesmo grafo para treino e para geração; os dois só divergem no
+final, depois dos logits.
+
+```mermaid
+flowchart TD
+    text["Texto bruto<br/>4 romances de Machado de Assis"] -->|"CharTokenizer.encode<br/>(01-tokenizer.md)"| ids["IDs — [N]<br/>N = 1.435.884 no treino"]
+    ids -->|"janelas deslizantes<br/>(02-dataset.md)"| xy["x, y — [B, T]<br/>[30, 128]"]
+
+    subgraph emb["Embeddings — 03-embeddings.md"]
+        direction LR
+        tokemb["Token Embedding E<br/>[V, d] = [112, 256]"]
+        posemb["Position Embedding P<br/>[T, d] = [128, 256]"]
+        somaemb((" + "))
+        tokemb --> somaemb
+        posemb --> somaemb
+    end
+    xy --> emb
+    emb -->|"h⁽⁰⁾"| h0["[B, T, d] = [30, 128, 256]"]
+
+    subgraph block["Transformer Block × L = 8 — 07-transformer-block.md"]
+        direction TB
+        hin(["h : entrada do bloco"])
+        ln1["LayerNorm ln_1"]
+        mha["Multi-Head Attention<br/>4 heads × d_h = 64<br/>(04-attention.md, 05-multi-head-attention.md)"]
+        add1((" + residual "))
+        ln2["LayerNorm ln_2"]
+        ffn["Feed Forward<br/>256 → 1024 → 256, GELU<br/>(06-feed-forward.md)"]
+        add2((" + residual "))
+        hout(["h : saída do bloco"])
+
+        hin --> ln1 --> mha --> add1
+        hin --> add1
+        add1 --> ln2 --> ffn --> add2
+        add1 --> add2
+        add2 --> hout
+    end
+    h0 --> block
+    block -->|"h⁽⁸⁾"| hfinal["[B, T, d] = [30, 128, 256]"]
+
+    hfinal --> lnfinal["LayerNorm final<br/>(08-gpt.md)"]
+    lnfinal --> lmhead["LM Head<br/>[d, V], pesos = Eᵀ (weight tying)<br/>(09-lm-head.md)"]
+    lmhead --> logits["logits — [B, T, V]<br/>[30, 128, 112]"]
+
+    logits --> loss["cross_entropy(logits, y)<br/>(10-loss.md)"]
+    loss --> lossval(["loss escalar<br/>AdamW minimiza — 11-training.md"])
+
+    logits -.->|"na geração, só a<br/>última posição<br/>(13-generation.md)"| sample["softmax + temperature / top-k / top-p"]
+    sample -.-> nexttoken(["próximo token<br/>concatenado ao contexto; o loop se repete"])
+
+    classDef tensor fill:#eef2ff,stroke:#4f46e5,color:#1e1b4b
+    classDef op fill:#ecfdf5,stroke:#059669,color:#022c22
+    classDef scalar fill:#fef3c7,stroke:#b45309,color:#451a03
+    class text,ids,xy,h0,hfinal,logits tensor
+    class tokemb,posemb,somaemb,ln1,mha,add1,ln2,ffn,add2,lnfinal,lmhead,loss,sample tensor
+    class hin,hout op
+    class lossval,nexttoken scalar
+```
+
+**Como ler:** setas cheias são o caminho normal (embeddings → blocos → LM head → logits); setas
+tracejadas marcam onde a geração diverge do treino — em vez de comparar os logits com `y` e
+calcular a loss, a geração olha só a última posição, sorteia um token e concatena de volta em
+`ids`, repetindo o ciclo (`generate`, [13-generation.md](13-generation.md)). Cada caixa com um
+nome de arquivo entre parênteses tem seu próprio documento — a matemática completa de cada uma não
+está aqui, só o formato que entra e sai.
 
 ---
 
@@ -64,29 +138,29 @@ exato em que parou.
 
 | símbolo | como se lê | significado | `tiny.yaml` |
 |---|---|---|---:|
-| $N$ | "ene" | tokens no corpus de treino | 337.307 |
-| $B$ | "bê" | `batch_size` | 32 |
+| $N$ | "ene" | tokens no corpus de treino | 1.435.884 |
+| $B$ | "bê" | `batch_size` | 30 |
 | $T$ | "tê" | `context_length` | 128 |
-| $V$ | "vê" | `vocab_size` (definido pelo tokenizer) | 97 |
-| $d$ | "dê" | `d_model` | 128 |
+| $V$ | "vê" | `vocab_size` (definido pelo tokenizer) | 112 |
+| $d$ | "dê" | `d_model` | 256 |
 | $h$ | "agá" | `num_heads` | 4 |
-| $d_h$ | "dê agá" | `head_dim` $= d / h$ | 32 |
-| $L$ | "ele" | `num_layers` | 4 |
-| $d_{ff}$ | "dê éfe éfe" | dimensão interna do feed-forward $= 4d$ | 512 |
+| $d_h$ | "dê agá" | `head_dim` $= d / h$ | 64 |
+| $L$ | "ele" | `num_layers` | 8 |
+| $d_{ff}$ | "dê éfe éfe" | dimensão interna do feed-forward $= 4d$ | 1.024 |
 
 **Cada letra em palavras:**
 
-- **$N$**: quantos tokens (aqui, caracteres) existem no texto de treino: os primeiros 90% do
-  livro.
+- **$N$**: quantos tokens (aqui, caracteres) existem no texto de treino: os primeiros 90% dos 4
+  romances.
 - **$B$**: quantas sequências o modelo processa juntas num passo de treino.
 - **$T$**: quantos tokens cada sequência tem. É também o maior contexto que o modelo enxerga:
   128 caracteres, cerca de 23 palavras.
-- **$V$**: quantos tokens diferentes existem: 93 caracteres do corpus mais 4 tokens especiais.
+- **$V$**: quantos tokens diferentes existem: 108 caracteres do corpus mais 4 tokens especiais.
   Não fica no YAML porque depende do corpus, não da arquitetura.
 - **$d$**: quantos números tem cada vetor que atravessa o modelo. É a "largura" do residual
   stream.
 - **$h$**: quantas heads de attention rodam em paralelo dentro de cada bloco.
-- **$d_h$**: quantos números cada head usa. As $h$ heads juntas somam $d$: $4 \times 32 = 128$.
+- **$d_h$**: quantos números cada head usa. As $h$ heads juntas somam $d$: $4 \times 64 = 256$.
 - **$L$**: quantos blocos Transformer são empilhados.
 - **$d_{ff}$**: quantos neurônios tem a camada interna do feed-forward.
 
@@ -99,20 +173,20 @@ essas letras reaproveitadas.
 
 | símbolo | como se lê | significado | shape ou valor no `tiny.yaml` |
 |---|---|---|---|
-| $x$, $y$ | "xis", "ípsilon" | IDs de entrada e alvos; $y$ é $x$ deslocado uma posição (o próximo token) | `[B, T]` = `[32, 128]` |
-| $E$ | "é" | matriz do token embedding: uma linha por token | `[V, d]` = `[97, 128]` |
-| $P$ | "pê" | matriz do positional embedding: uma linha por posição | `[T, d]` = `[128, 128]` |
+| $x$, $y$ | "xis", "ípsilon" | IDs de entrada e alvos; $y$ é $x$ deslocado uma posição (o próximo token) | `[B, T]` = `[30, 128]` |
+| $E$ | "é" | matriz do token embedding: uma linha por token | `[V, d]` = `[112, 256]` |
+| $P$ | "pê" | matriz do positional embedding: uma linha por posição | `[T, d]` = `[128, 256]` |
 | $E[x]$ | "E indexado por x" | troca cada ID pela sua linha de $E$ | `[B, T, d]` |
 | $P[0..T-1]$ | "P de 0 a T menos 1" | as linhas das posições 0 a $T-1$ | `[T, d]` |
 | $h^{(\ell)}$, `h⁽ℓ⁾` | "agá ele" | residual stream depois do bloco $\ell$; o índice entre parênteses **não** é potência. $h^{(0)}$ é a saída dos embeddings | `[B, T, d]` |
-| $\ell$ | "ele" cursivo | número do bloco | 1 a 4 |
+| $\ell$ | "ele" cursivo | número do bloco | 1 a 8 |
 | $\text{LN}$ | "LayerNorm" | normaliza cada vetor (média 0, variância 1) e aplica $\gamma$ e $\beta$ | `[B, T, d]` → `[B, T, d]` |
 | $\text{MHA}$ | "multi-head attention" | a attention com $h$ heads e projeção de saída | `[B, T, d]` → `[B, T, d]` |
 | $\text{FFN}$ | "feed-forward network" | a rede de duas camadas aplicada a cada posição | `[B, T, d]` → `[B, T, d]` |
 | $\leftarrow$ | "passa a valer" | atribuição: o valor da direita substitui o da esquerda | |
-| $\gamma$, $\beta$ | "gama", "beta" | escala e deslocamento aprendidos de cada LayerNorm | $d$ = 128 números cada |
+| $\gamma$, $\beta$ | "gama", "beta" | escala e deslocamento aprendidos de cada LayerNorm | $d$ = 256 números cada |
 | $W_Q$, $W_K$, $W_V$, $W_O$ | "dáblio quê", "kê", "vê", "ó" | projeções da attention: queries, keys, values e saída | `[d, d]` cada, juntando as heads |
-| $W_1$, $b_1$, $W_2$, $b_2$ | "dáblio um", "bê um"… | pesos e biases do feed-forward | `[512, 128]`, `[512]`, `[128, 512]`, `[128]` |
+| $W_1$, $b_1$, $W_2$, $b_2$ | "dáblio um", "bê um"… | pesos e biases do feed-forward | `[1024, 256]`, `[1024]`, `[256, 1024]`, `[256]` |
 | $\mathcal{N}(0, 0{,}02^2)$ | "normal de média 0 e desvio 0,02" | sorteio usado para inicializar os pesos | |
 | $-\infty$ | "menos infinito" | valor que a máscara causal soma aos scores do futuro | |
 | $\mathcal{L}$ | "ele cursivo", "a loss" | o erro de previsão que o treino vai diminuir ([10-loss.md](10-loss.md)) | um número |
@@ -147,15 +221,15 @@ Nas duas linhas do bloco, `h` é o residual stream (um tensor), não o número d
 
 | etapa | objetivo | shape no `tiny.yaml` | doc |
 |---|---|---|---|
-| **texto** | a matéria-prima: *Dom Casmurro*, limpo e normalizado. O modelo aprende a continuar esse texto. | `str` com 374.785 caracteres | [02](02-dataset.md) |
-| **tokenizer** | troca cada caractere por um ID inteiro de 0 a 96, porque redes neurais só operam sobre números. | `[N]` = `[337.307]` no treino | [01](01-tokenizer.md) |
-| **batches** | recorta os IDs em janelas; `x` é a janela e `y` é a mesma janela deslocada uma posição, ou seja, o próximo token de cada posição. Empilha $B$ janelas. | `x`, `y`: `[32, 128]` | [02](02-dataset.md) |
-| **embeddings** | troca cada ID por um vetor aprendido de $d$ números e soma o vetor da posição: o modelo passa a saber **qual** caractere e **onde** ele está. | `[32, 128, 128]` | [03](03-embeddings.md) |
-| **attention** | a única etapa que **move informação entre posições**: cada posição lê as anteriores (nunca as futuras, por causa da máscara causal) e traz o que for relevante. | `[32, 128, 128]`; por dentro, 4 heads `[32, 4, 128, 32]` | [04](04-attention.md), [05](05-multi-head-attention.md) |
-| **feed-forward** | processa **cada posição sozinha**, com uma não-linearidade (GELU): combina a informação que a attention trouxe. | `[32, 128, 128]`; por dentro, 512 neurônios `[32, 128, 512]` | [06](06-feed-forward.md) |
-| **LayerNorm** | padroniza a escala de cada vetor (média 0, variância 1). Fica antes de cada subcamada (no bloco) e antes do LM head (a final), para que todos leiam entradas de tamanho estável. | `[32, 128, 128]` | [07](07-transformer-block.md), [08](08-gpt.md) |
-| **LM head** | dá um score (**logit**) a cada um dos 97 tokens, em cada posição: o produto escalar entre o estado final e a linha daquele token. | `[32, 128, 97]` | [09](09-lm-head.md) |
-| **loss** | compara os logits com `y`: média, nas 4.096 posições, de $-\log$ da probabilidade dada ao token correto (cross-entropy). É o número que o treino vai diminuir. | um escalar | [10](10-loss.md) |
+| **texto** | a matéria-prima: 4 romances de Machado de Assis, limpos e normalizados. O modelo aprende a continuar esse texto. | `str` com 1.595.426 caracteres | [02](02-dataset.md) |
+| **tokenizer** | troca cada caractere por um ID inteiro de 0 a 111, porque redes neurais só operam sobre números. | `[N]` = `[1.435.884]` no treino | [01](01-tokenizer.md) |
+| **batches** | recorta os IDs em janelas; `x` é a janela e `y` é a mesma janela deslocada uma posição, ou seja, o próximo token de cada posição. Empilha $B$ janelas. | `x`, `y`: `[30, 128]` | [02](02-dataset.md) |
+| **embeddings** | troca cada ID por um vetor aprendido de $d$ números e soma o vetor da posição: o modelo passa a saber **qual** caractere e **onde** ele está. | `[30, 128, 256]` | [03](03-embeddings.md) |
+| **attention** | a única etapa que **move informação entre posições**: cada posição lê as anteriores (nunca as futuras, por causa da máscara causal) e traz o que for relevante. | `[30, 128, 256]`; por dentro, 4 heads `[30, 4, 128, 64]` | [04](04-attention.md), [05](05-multi-head-attention.md) |
+| **feed-forward** | processa **cada posição sozinha**, com uma não-linearidade (GELU): combina a informação que a attention trouxe. | `[30, 128, 256]`; por dentro, 1.024 neurônios `[30, 128, 1024]` | [06](06-feed-forward.md) |
+| **LayerNorm** | padroniza a escala de cada vetor (média 0, variância 1). Fica antes de cada subcamada (no bloco) e antes do LM head (a final), para que todos leiam entradas de tamanho estável. | `[30, 128, 256]` | [07](07-transformer-block.md), [08](08-gpt.md) |
+| **LM head** | dá um score (**logit**) a cada um dos 112 tokens, em cada posição: o produto escalar entre o estado final e a linha daquele token. | `[30, 128, 112]` | [09](09-lm-head.md) |
+| **loss** | compara os logits com `y`: média, nas 3.840 posições, de $-\log$ da probabilidade dada ao token correto (cross-entropy). É o número que o treino vai diminuir. | um escalar | [10](10-loss.md) |
 
 Só três etapas mudam o "formato" dos dados: o tokenizer (texto → inteiros), os embeddings
 (inteiros → vetores de $d$ números) e o LM head ($d$ números → $V$ scores). Entre os embeddings
@@ -194,11 +268,11 @@ $$
   $\beta$. A fórmula usa o mesmo nome para os dois.
 - **No código** ([`model/transformer_block.py`](../model/transformer_block.py), linhas 37–38):
   `x = x + self.attention(self.ln_1(x))` e `x = x + self.feed_forward(self.ln_2(x))`.
-- **Desenrolando os $L$ blocos:** o stream final é $h^{(0)}$ mais a soma das $2L = 8$ escritas
+- **Desenrolando os $L$ blocos:** o stream final é $h^{(0)}$ mais a soma das $2L = 16$ escritas
   ([07-transformer-block.md](07-transformer-block.md), seção 3.1).
-- **Com números** (inicialização, [08-gpt.md](08-gpt.md)): a norma média por posição é 0,315
-  depois dos embeddings e cresce ~0,06 por bloco até 0,556 no fim do bloco 4. A LayerNorm final a
-  leva para 11,29 ($\approx \sqrt{128}$).
+- **Com números** (inicialização, medido com `configs/tiny.yaml`): a norma média por posição é
+  0,454 depois dos embeddings e cresce ~0,15 por bloco até 1,491 no fim do bloco 8. A LayerNorm
+  final a leva para 15,99 ($\approx \sqrt{256} = 16$).
 
 Três consequências guiam o resto do projeto:
 
@@ -250,46 +324,49 @@ experimentos de 07-transformer-block.md e 08-gpt.md. A attention não usa bias (
 
 | parte | fórmula | com `tiny.yaml` | parâmetros |
 |---|---|---|---:|
-| token embedding | $V d$ | $97 \cdot 128$ | 12.416 |
-| position embedding | $T d$ | $128 \cdot 128$ | 16.384 |
-| attention, por bloco | $4d^2$ (Q, K, V e projeção de saída, sem bias) | $4 \cdot 128^2$ | 65.536 |
-| feed-forward, por bloco | $d \cdot 4d + 4d + 4d \cdot d + d$ (com bias) | $65.536 + 512 + 65.536 + 128$ | 131.712 |
-| 2 LayerNorms, por bloco | $2 \cdot 2d$ ($\gamma$ e $\beta$) | $4 \cdot 128$ | 512 |
-| **$L = 4$ blocos** | $L(12d^2 + 9d)$ | $4 \cdot 197.760$ | **791.040** |
-| LayerNorm final | $2d$ | $2 \cdot 128$ | 256 |
-| LM head | 0 com weight tying (padrão); $Vd$ sem | 0 ou $97 \cdot 128$ | 0 (12.416 sem tying) |
-| **total** (com weight tying) | $Vd + Td + L(12d^2 + 9d) + 2d$ | $12.416 + 16.384 + 791.040 + 256$ | **820.096** (832.512 sem tying) |
+| token embedding | $V d$ | $112 \cdot 256$ | 28.672 |
+| position embedding | $T d$ | $128 \cdot 256$ | 32.768 |
+| attention, por bloco | $4d^2$ (Q, K, V e projeção de saída, sem bias) | $4 \cdot 256^2$ | 262.144 |
+| feed-forward, por bloco | $d \cdot 4d + 4d + 4d \cdot d + d$ (com bias) | $262.144 + 1.024 + 262.144 + 256$ | 525.568 |
+| 2 LayerNorms, por bloco | $2 \cdot 2d$ ($\gamma$ e $\beta$) | $4 \cdot 256$ | 1.024 |
+| **$L = 8$ blocos** | $L(12d^2 + 9d)$ | $8 \cdot 788.736$ | **6.309.888** |
+| LayerNorm final | $2d$ | $2 \cdot 256$ | 512 |
+| LM head | 0 com weight tying (padrão); $Vd$ sem | 0 ou $112 \cdot 256$ | 0 (28.672 sem tying) |
+| **total** (com weight tying) | $Vd + Td + L(12d^2 + 9d) + 2d$ | $28.672 + 32.768 + 6.309.888 + 512$ | **6.371.840** (6.400.512 sem tying) |
 
 **Lendo as fórmulas:**
 
-- **$Vd$** (token embedding): uma linha de $d = 128$ números para cada um dos $V = 97$ tokens.
-- **$Td$** (position embedding): uma linha de 128 números para cada uma das $T = 128$ posições.
+- **$Vd$** (token embedding): uma linha de $d = 256$ números para cada um dos $V = 112$ tokens.
+- **$Td$** (position embedding): uma linha de 256 números para cada uma das $T = 128$ posições.
 - **$4d^2$** (attention): quatro matrizes $d \times d$, uma para cada projeção ($W_Q$, $W_K$, $W_V$
-  e $W_O$). Cada uma tem $128 \times 128 = 16.384$ números, e $4 \times 16.384 = 65.536$. As 4
-  heads não acrescentam nada: dividem cada matriz em blocos de $d_h = 32$
+  e $W_O$). Cada uma tem $256 \times 256 = 65.536$ números, e $4 \times 65.536 = 262.144$. As 4
+  heads não acrescentam nada: dividem cada matriz em blocos de $d_h = 64$
   ([05-multi-head-attention.md](05-multi-head-attention.md)).
 - **$d \cdot 4d + 4d + 4d \cdot d + d$** (feed-forward), termo a termo:
-  - $d \cdot 4d$: $W_1$, que expande $128 \to 512$: $128 \times 512 = 65.536$;
-  - $4d$: $b_1$, um bias por neurônio: 512;
-  - $4d \cdot d$: $W_2$, que contrai $512 \to 128$: $65.536$;
-  - $d$: $b_2$, um bias por coordenada da saída: 128;
-  - somando: $8d^2 + 5d = 131.072 + 640 = 131.712$.
+  - $d \cdot 4d$: $W_1$, que expande $256 \to 1.024$: $256 \times 1.024 = 262.144$;
+  - $4d$: $b_1$, um bias por neurônio: 1.024;
+  - $4d \cdot d$: $W_2$, que contrai $1.024 \to 256$: $262.144$;
+  - $d$: $b_2$, um bias por coordenada da saída: 256;
+  - somando: $8d^2 + 5d = 524.288 + 1.280 = 525.568$.
 - **$2 \cdot 2d$** (LayerNorms do bloco): duas LayerNorms, cada uma com $\gamma$ e $\beta$ de $d$
-  números: $4 \times 128 = 512$.
+  números: $4 \times 256 = 1.024$.
 - **$12d^2 + 9d$** (um bloco): $4d^2 + (8d^2 + 5d) + 4d = 12d^2 + 9d$, ou seja,
-  $196.608 + 1.152 = 197.760$.
-- **$L(12d^2 + 9d)$**: $4 \times 197.760 = 791.040$.
-- **$2d$** (LayerNorm final): $\gamma$ e $\beta$, $2 \times 128 = 256$.
+  $786.432 + 2.304 = 788.736$.
+- **$L(12d^2 + 9d)$**: $8 \times 788.736 = 6.309.888$.
+- **$2d$** (LayerNorm final): $\gamma$ e $\beta$, $2 \times 256 = 512$.
 - **LM head:** com weight tying, reusa a matriz $E$ do token embedding e não acrescenta nenhum
   parâmetro ([09-lm-head.md](09-lm-head.md)). Sem tying, teria a sua própria matriz $V \times d$.
-- **Total:** $12.416 + 16.384 + 791.040 + 256 = 820.096$. Sem tying, $+\,12.416 = 832.512$.
+- **Total:** $28.672 + 32.768 + 6.309.888 + 512 = 6.371.840$. Sem tying, $+\,28.672 = 6.400.512$.
 
-Os blocos concentram ~96% dos parâmetros, e dentro de cada bloco o feed-forward tem o
-dobro da attention.
+Os blocos concentram ~99% dos parâmetros — mais que antes, porque $L$ dobrou (4 → 8) enquanto os
+embeddings continuam dependendo só de $V$ e $T$ — e dentro de cada bloco o feed-forward continua
+com o dobro da attention (essa razão não depende de $d$).
 
-- Blocos: $791.040 / 820.096 = 96{,}5\%$. Embeddings: $28.800 / 820.096 = 3{,}5\%$.
-- Feed-forward: $131.712 / 65.536 \approx 2{,}01$ vezes a attention, 66,6% de cada bloco.
-- O termo $d^2$ domina: dobrar $d$ quase quadruplica os parâmetros dos blocos.
+- Blocos: $6.309.888 / 6.371.840 = 99{,}0\%$. Embeddings: $61.440 / 6.371.840 = 1{,}0\%$.
+- Feed-forward: $525.568 / 262.144 \approx 2{,}01$ vezes a attention, 66,6% de cada bloco.
+- O termo $d^2$ domina: dobrar $d$ quase quadruplica os parâmetros dos blocos — é por isso que ir
+  de $d{=}128$ para $d{=}256$ (mantendo $L{=}4$) levaria a bem menos que os 6,4 milhões atuais; o
+  salto grande veio de **também** dobrar $L$.
 
 ---
 
@@ -301,7 +378,7 @@ documento em que a decisão é discutida, quase sempre com uma medição que a j
 | decisão | alternativa | motivo | doc |
 |---|---|---|---|
 | tokenizer por caracteres | palavras, BPE | vocabulário pequeno, sem `<UNK>` no corpus, treina na CPU | [01](01-tokenizer.md) |
-| corpus *Dom Casmurro* (1899) | Tiny Shakespeare | português, domínio público, ~375 mil caracteres | [02](02-dataset.md) |
+| corpus: 4 romances de Machado de Assis | Tiny Shakespeare; só *Dom Casmurro* | português, domínio público; mais dados reduziu o gap validação−treino de +0,35 para +0,17 | [02](02-dataset.md) |
 | split treino/validação contíguo | janelas sorteadas | evita vazamento entre janelas sobrepostas | [02](02-dataset.md) |
 | positional embedding absoluto aprendido | sinusoidal, RoPE, ALiBi | o mais simples; fiel ao GPT-2 | [03](03-embeddings.md) |
 | inicialização $\mathcal{N}(0, 0{,}02^2)$ | padrão do PyTorch | convenção do GPT-2; residual stream começa em escala pequena | [03](03-embeddings.md) |
@@ -330,6 +407,8 @@ documento em que a decisão é discutida, quase sempre com uma medição que a j
 | checkpoint de treino completo: pesos, AdamW, progresso, posição no loader e estados aleatórios | só os pesos | retomar reproduz bit a bit o treino sem pausa (testado); sem o estado do AdamW, os primeiros passos andam mais que o normal e o resultado deixa de ser reproduzível | [15](15-checkpoints.md) |
 | gravar em `.tmp` e renomear | escrever direto no arquivo final | uma queda durante a escrita não destrói o checkpoint anterior | [15](15-checkpoints.md) |
 | `latest.pt` a cada época, `checkpoint_<passo>.pt` a cada 1000 passos, `best.pt` pela validação | só o modelo final | perde-se no máximo uma época numa queda; se o treino passar do ponto, o melhor modelo continua salvo | [15](15-checkpoints.md) |
+| `dropout: 0.2` | `dropout: 0.1` (padrão anterior) | medido: melhor validação foi de 1,427 para 1,396 e o gap validação−treino caiu de +0,35 para +0,26, isolando dropout de `weight_decay` (que sozinho não ajudou) | [12](12-overfitting.md) |
+| `d_model: 256`, `num_layers: 8` | `d_model: 128`, `num_layers: 4` (config original) | mais capacidade só valeu a pena depois de também aumentar o corpus; sozinha, capacidade extra piora o overfitting | [12](12-overfitting.md) |
 
 Termos da tabela que aparecem aqui pela primeira vez: **BPE** (*byte-pair encoding*, tokenizer
 que junta pedaços frequentes de palavras), **RoPE** e **ALiBi** (formas alternativas de informar
