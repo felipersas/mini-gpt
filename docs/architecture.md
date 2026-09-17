@@ -51,14 +51,16 @@ Aqui você encontra:
 | checkpoints completos: retomar o treino exatamente, melhor época, salvamento atômico | ✅ | [15](15-checkpoints.md) |
 | suporte a GPU (CUDA/MPS), reprodutibilidade entre devices | ✅ | [16](16-gpu.md) |
 | performance: attention eficiente (SDPA) e mixed precision | ✅ | [17](17-performance.md) |
+| tokenizer BPE (subpalavras, em vez de um token por caractere) | ✅ | [18](18-bpe-tokenizer.md) |
 
-**Onde o projeto está.** O pipeline roda em CPU, CUDA ou MPS: tokenizer → janelas → GPT com
-**6.371.840 parâmetros** (`tiny.yaml`: 8 blocos, `d_model` 256) → loss → treino → avaliação →
-geração, treinado sobre 4 romances de Machado de Assis. Um treino de 60 épocas leva a melhor loss
-de validação a 1,222 (perplexidade 3,39) já na época 34 — depois disso o modelo só decora o treino
-([12-overfitting.md](12-overfitting.md)), e `best.pt` fica travado nessa época automaticamente. Os
-checkpoints servem tanto para gerar texto quanto para continuar o treino do ponto exato em que
-parou.
+**Onde o projeto está.** O pipeline roda em CPU, CUDA ou MPS: tokenizer BPE → janelas → GPT com
+**7.391.744 parâmetros** (`tiny.yaml`: 8 blocos, `d_model` 256, `vocab_size` 4.096) → loss → treino
+→ avaliação → geração, treinado sobre 4 romances de Machado de Assis mais um recorte de ~15M
+caracteres da Wikipedia em português (16.729.864 caracteres, 7.980.360 tokens BPE, no total). Um
+treino de 15 épocas leva a melhor loss de validação a 2,551 (perplexidade 12,82) na última época —
+diferente do treino anterior (corpus só de literatura), aqui o modelo ainda estava melhorando
+quando o treino parou, então vale continuar (`--resume`) se quiser espremer mais. Os checkpoints
+servem tanto para gerar texto quanto para continuar o treino do ponto exato em que parou.
 
 ---
 
@@ -72,12 +74,12 @@ final, depois dos logits.
 
 ```mermaid
 flowchart TD
-    text["Texto bruto<br/>4 romances de Machado de Assis"] -->|"CharTokenizer.encode<br/>(01-tokenizer.md)"| ids["IDs — [N]<br/>N = 1.435.884 no treino"]
+    text["Texto bruto<br/>Machado de Assis + Wikipedia (pt)"] -->|"BPETokenizer.encode<br/>(18-bpe-tokenizer.md)"| ids["IDs — [N]<br/>N = 7.182.324 no treino"]
     ids -->|"janelas deslizantes<br/>(02-dataset.md)"| xy["x, y — [B, T]<br/>[30, 128]"]
 
     subgraph emb["Embeddings — 03-embeddings.md"]
         direction LR
-        tokemb["Token Embedding E<br/>[V, d] = [112, 256]"]
+        tokemb["Token Embedding E<br/>[V, d] = [4096, 256]"]
         posemb["Position Embedding P<br/>[T, d] = [128, 256]"]
         somaemb((" + "))
         tokemb --> somaemb
@@ -108,7 +110,7 @@ flowchart TD
 
     hfinal --> lnfinal["LayerNorm final<br/>(08-gpt.md)"]
     lnfinal --> lmhead["LM Head<br/>[d, V], pesos = Eᵀ (weight tying)<br/>(09-lm-head.md)"]
-    lmhead --> logits["logits — [B, T, V]<br/>[30, 128, 112]"]
+    lmhead --> logits["logits — [B, T, V]<br/>[30, 128, 4096]"]
 
     logits --> loss["cross_entropy(logits, y)<br/>(10-loss.md)"]
     loss --> lossval(["loss escalar<br/>AdamW minimiza — 11-training.md"])
@@ -138,10 +140,10 @@ está aqui, só o formato que entra e sai.
 
 | símbolo | como se lê | significado | `tiny.yaml` |
 |---|---|---|---:|
-| $N$ | "ene" | tokens no corpus de treino | 1.435.884 |
+| $N$ | "ene" | tokens no corpus de treino | 7.182.324 |
 | $B$ | "bê" | `batch_size` | 30 |
 | $T$ | "tê" | `context_length` | 128 |
-| $V$ | "vê" | `vocab_size` (definido pelo tokenizer) | 112 |
+| $V$ | "vê" | `vocab_size` (alvo do BPE, `data.vocab_size`) | 4.096 |
 | $d$ | "dê" | `d_model` | 256 |
 | $h$ | "agá" | `num_heads` | 4 |
 | $d_h$ | "dê agá" | `head_dim` $= d / h$ | 64 |
@@ -150,13 +152,15 @@ está aqui, só o formato que entra e sai.
 
 **Cada letra em palavras:**
 
-- **$N$**: quantos tokens (aqui, caracteres) existem no texto de treino: os primeiros 90% dos 4
-  romances.
+- **$N$**: quantos tokens (aqui, subpalavras BPE, não mais caracteres) existem no texto de treino:
+  os primeiros 90% do corpus.
 - **$B$**: quantas sequências o modelo processa juntas num passo de treino.
 - **$T$**: quantos tokens cada sequência tem. É também o maior contexto que o modelo enxerga:
-  128 caracteres, cerca de 23 palavras.
-- **$V$**: quantos tokens diferentes existem: 108 caracteres do corpus mais 4 tokens especiais.
-  Não fica no YAML porque depende do corpus, não da arquitetura.
+  128 tokens BPE, cerca de 268 caracteres ([18-bpe-tokenizer.md](18-bpe-tokenizer.md), seção 4).
+- **$V$**: quantos tokens diferentes existem: 4 tokens especiais mais o alfabeto do corpus
+  (1.130 caracteres) mais 2.962 merges aprendidos, até o alvo `vocab_size: 4096` de
+  [18-bpe-tokenizer.md](18-bpe-tokenizer.md). Fica no YAML porque o BPE precisa de um alvo antes de
+  treinar — diferente do `CharTokenizer`, cujo `vocab_size` só existe depois de ler o corpus.
 - **$d$**: quantos números tem cada vetor que atravessa o modelo. É a "largura" do residual
   stream.
 - **$h$**: quantas heads de attention rodam em paralelo dentro de cada bloco.
@@ -174,7 +178,7 @@ essas letras reaproveitadas.
 | símbolo | como se lê | significado | shape ou valor no `tiny.yaml` |
 |---|---|---|---|
 | $x$, $y$ | "xis", "ípsilon" | IDs de entrada e alvos; $y$ é $x$ deslocado uma posição (o próximo token) | `[B, T]` = `[30, 128]` |
-| $E$ | "é" | matriz do token embedding: uma linha por token | `[V, d]` = `[112, 256]` |
+| $E$ | "é" | matriz do token embedding: uma linha por token | `[V, d]` = `[4096, 256]` |
 | $P$ | "pê" | matriz do positional embedding: uma linha por posição | `[T, d]` = `[128, 256]` |
 | $E[x]$ | "E indexado por x" | troca cada ID pela sua linha de $E$ | `[B, T, d]` |
 | $P[0..T-1]$ | "P de 0 a T menos 1" | as linhas das posições 0 a $T-1$ | `[T, d]` |
@@ -198,7 +202,7 @@ essas letras reaproveitadas.
 ```text
                                                                 shape            doc
 texto (str)
-  │  CharTokenizer.encode                                       [N]              01
+  │  BPETokenizer.encode                                        [N]              18
   ▼
 ids ── split contíguo, janelas deslizantes, DataLoader
   │                                                             x, y: [B, T]     02
@@ -221,14 +225,14 @@ Nas duas linhas do bloco, `h` é o residual stream (um tensor), não o número d
 
 | etapa | objetivo | shape no `tiny.yaml` | doc |
 |---|---|---|---|
-| **texto** | a matéria-prima: 4 romances de Machado de Assis, limpos e normalizados. O modelo aprende a continuar esse texto. | `str` com 1.595.426 caracteres | [02](02-dataset.md) |
-| **tokenizer** | troca cada caractere por um ID inteiro de 0 a 111, porque redes neurais só operam sobre números. | `[N]` = `[1.435.884]` no treino | [01](01-tokenizer.md) |
+| **texto** | a matéria-prima: 4 romances de Machado de Assis mais um recorte da Wikipedia em português, limpos e normalizados. O modelo aprende a continuar esse texto. | `str` com 16.729.864 caracteres | [02](02-dataset.md) |
+| **tokenizer** | troca cada subpalavra aprendida (BPE) por um ID inteiro de 0 a 4.095, porque redes neurais só operam sobre números. | `[N]` = `[7.182.324]` no treino | [18](18-bpe-tokenizer.md) |
 | **batches** | recorta os IDs em janelas; `x` é a janela e `y` é a mesma janela deslocada uma posição, ou seja, o próximo token de cada posição. Empilha $B$ janelas. | `x`, `y`: `[30, 128]` | [02](02-dataset.md) |
 | **embeddings** | troca cada ID por um vetor aprendido de $d$ números e soma o vetor da posição: o modelo passa a saber **qual** caractere e **onde** ele está. | `[30, 128, 256]` | [03](03-embeddings.md) |
 | **attention** | a única etapa que **move informação entre posições**: cada posição lê as anteriores (nunca as futuras, por causa da máscara causal) e traz o que for relevante. | `[30, 128, 256]`; por dentro, 4 heads `[30, 4, 128, 64]` | [04](04-attention.md), [05](05-multi-head-attention.md) |
 | **feed-forward** | processa **cada posição sozinha**, com uma não-linearidade (GELU): combina a informação que a attention trouxe. | `[30, 128, 256]`; por dentro, 1.024 neurônios `[30, 128, 1024]` | [06](06-feed-forward.md) |
 | **LayerNorm** | padroniza a escala de cada vetor (média 0, variância 1). Fica antes de cada subcamada (no bloco) e antes do LM head (a final), para que todos leiam entradas de tamanho estável. | `[30, 128, 256]` | [07](07-transformer-block.md), [08](08-gpt.md) |
-| **LM head** | dá um score (**logit**) a cada um dos 112 tokens, em cada posição: o produto escalar entre o estado final e a linha daquele token. | `[30, 128, 112]` | [09](09-lm-head.md) |
+| **LM head** | dá um score (**logit**) a cada um dos 4.096 tokens, em cada posição: o produto escalar entre o estado final e a linha daquele token. | `[30, 128, 4096]` | [09](09-lm-head.md) |
 | **loss** | compara os logits com `y`: média, nas 3.840 posições, de $-\log$ da probabilidade dada ao token correto (cross-entropy). É o número que o treino vai diminuir. | um escalar | [10](10-loss.md) |
 
 Só três etapas mudam o "formato" dos dados: o tokenizer (texto → inteiros), os embeddings
@@ -296,7 +300,7 @@ seu papel e onde está explicado.
 
 | componente | entrada → saída | papel | código | doc |
 |---|---|---|---|---|
-| Tokenizer | `str` → `[N]` | texto ↔ IDs, um por caractere | `tokenizer/` (`CharTokenizer`) | [01](01-tokenizer.md) |
+| Tokenizer | `str` → `[N]` | texto ↔ IDs, um por subpalavra (BPE); `CharTokenizer` continua como referência | `tokenizer/` (`BPETokenizer`) | [18](18-bpe-tokenizer.md) |
 | Dataset / DataLoader | `[N]` → `[B, T]`, `[B, T]` | pares (contexto, próximo token) | `data/dataset.py`, `data/loader.py` | [02](02-dataset.md) |
 | Embeddings | `[B, T]` → `[B, T, d]` | ID → vetor, mais informação de posição | `model/embeddings.py` | [03](03-embeddings.md) |
 | Self-attention causal (1 head) | `[B, T, d]` → `[B, T, d_h]` | cada posição lê as anteriores | `model/attention.py` (`CausalSelfAttention`) | [04](04-attention.md) |
@@ -324,19 +328,21 @@ experimentos de 07-transformer-block.md e 08-gpt.md. A attention não usa bias (
 
 | parte | fórmula | com `tiny.yaml` | parâmetros |
 |---|---|---|---:|
-| token embedding | $V d$ | $112 \cdot 256$ | 28.672 |
+| token embedding | $V d$ | $4.096 \cdot 256$ | 1.048.576 |
 | position embedding | $T d$ | $128 \cdot 256$ | 32.768 |
 | attention, por bloco | $4d^2$ (Q, K, V e projeção de saída, sem bias) | $4 \cdot 256^2$ | 262.144 |
 | feed-forward, por bloco | $d \cdot 4d + 4d + 4d \cdot d + d$ (com bias) | $262.144 + 1.024 + 262.144 + 256$ | 525.568 |
 | 2 LayerNorms, por bloco | $2 \cdot 2d$ ($\gamma$ e $\beta$) | $4 \cdot 256$ | 1.024 |
 | **$L = 8$ blocos** | $L(12d^2 + 9d)$ | $8 \cdot 788.736$ | **6.309.888** |
 | LayerNorm final | $2d$ | $2 \cdot 256$ | 512 |
-| LM head | 0 com weight tying (padrão); $Vd$ sem | 0 ou $112 \cdot 256$ | 0 (28.672 sem tying) |
-| **total** (com weight tying) | $Vd + Td + L(12d^2 + 9d) + 2d$ | $28.672 + 32.768 + 6.309.888 + 512$ | **6.371.840** (6.400.512 sem tying) |
+| LM head | 0 com weight tying (padrão); $Vd$ sem | 0 ou $4.096 \cdot 256$ | 0 (1.048.576 sem tying) |
+| **total** (com weight tying) | $Vd + Td + L(12d^2 + 9d) + 2d$ | $1.048.576 + 32.768 + 6.309.888 + 512$ | **7.391.744** (8.440.320 sem tying) |
 
 **Lendo as fórmulas:**
 
-- **$Vd$** (token embedding): uma linha de $d = 256$ números para cada um dos $V = 112$ tokens.
+- **$Vd$** (token embedding): uma linha de $d = 256$ números para cada um dos $V = 4.096$ tokens
+  do BPE — bem mais que os 1.130 caracteres do alfabeto puro, porque $V$ inclui os 2.962 merges
+  aprendidos ([18-bpe-tokenizer.md](18-bpe-tokenizer.md)).
 - **$Td$** (position embedding): uma linha de 256 números para cada uma das $T = 128$ posições.
 - **$4d^2$** (attention): quatro matrizes $d \times d$, uma para cada projeção ($W_Q$, $W_K$, $W_V$
   e $W_O$). Cada uma tem $256 \times 256 = 65.536$ números, e $4 \times 65.536 = 262.144$. As 4
@@ -356,17 +362,21 @@ experimentos de 07-transformer-block.md e 08-gpt.md. A attention não usa bias (
 - **$2d$** (LayerNorm final): $\gamma$ e $\beta$, $2 \times 256 = 512$.
 - **LM head:** com weight tying, reusa a matriz $E$ do token embedding e não acrescenta nenhum
   parâmetro ([09-lm-head.md](09-lm-head.md)). Sem tying, teria a sua própria matriz $V \times d$.
-- **Total:** $28.672 + 32.768 + 6.309.888 + 512 = 6.371.840$. Sem tying, $+\,28.672 = 6.400.512$.
+- **Total:** $1.048.576 + 32.768 + 6.309.888 + 512 = 7.391.744$. Sem tying,
+  $+\,1.048.576 = 8.440.320$.
 
-Os blocos concentram ~99% dos parâmetros — mais que antes, porque $L$ dobrou (4 → 8) enquanto os
-embeddings continuam dependendo só de $V$ e $T$ — e dentro de cada bloco o feed-forward continua
-com o dobro da attention (essa razão não depende de $d$).
+Os blocos caem de ~99% para **~85%** dos parâmetros com o BPE: o vocabulário de 4.096 tokens
+custa 1.048.576 parâmetros só no token embedding, contra 28.672 quando o tokenizer era por
+caractere ($V = 112$) — o `vocab_size` do BPE deixou de ser um detalhe irrelevante no orçamento de
+parâmetros. Dentro de cada bloco, o feed-forward continua com o dobro da attention (essa razão não
+depende de $V$).
 
-- Blocos: $6.309.888 / 6.371.840 = 99{,}0\%$. Embeddings: $61.440 / 6.371.840 = 1{,}0\%$.
+- Blocos: $6.309.888 / 7.391.744 = 85{,}4\%$. Embeddings (token + posição):
+  $1.081.344 / 7.391.744 = 14{,}6\%$ — antes do BPE eram 1,0%.
 - Feed-forward: $525.568 / 262.144 \approx 2{,}01$ vezes a attention, 66,6% de cada bloco.
-- O termo $d^2$ domina: dobrar $d$ quase quadruplica os parâmetros dos blocos — é por isso que ir
-  de $d{=}128$ para $d{=}256$ (mantendo $L{=}4$) levaria a bem menos que os 6,4 milhões atuais; o
-  salto grande veio de **também** dobrar $L$.
+- O termo $d^2$ domina **dentro de um bloco**: dobrar $d$ quase quadruplica os parâmetros dos
+  blocos. Mas o vocabulário do tokenizer é o outro eixo que importa: trocar `CharTokenizer` por
+  BPE multiplicou o token embedding por ~37x ($4.096/112$) sem tocar em $d$ nem $L$.
 
 ---
 
@@ -377,8 +387,10 @@ documento em que a decisão é discutida, quase sempre com uma medição que a j
 
 | decisão | alternativa | motivo | doc |
 |---|---|---|---|
-| tokenizer por caracteres | palavras, BPE | vocabulário pequeno, sem `<UNK>` no corpus, treina na CPU | [01](01-tokenizer.md) |
+| tokenizer por caracteres (escolha original) | palavras, BPE | vocabulário pequeno, sem `<UNK>` no corpus, treina na CPU | [01](01-tokenizer.md) |
+| tokenizer BPE (escolha atual) | manter por caracteres | a geração parava no meio da palavra; BPE cobre ~2,1x mais caracteres no mesmo `context_length`, ao custo de um token embedding bem maior ($V$: 112 → 4.096) | [18](18-bpe-tokenizer.md) |
 | corpus: 4 romances de Machado de Assis | Tiny Shakespeare; só *Dom Casmurro* | português, domínio público; mais dados reduziu o gap validação−treino de +0,35 para +0,17 | [02](02-dataset.md) |
+| corpus + recorte da Wikipedia (pt) | manter só literatura | diversidade factual/temática além da prosa do século XIX; o registro gerado passou a incluir estrutura de artigo (seções, listas) | [02](02-dataset.md) |
 | split treino/validação contíguo | janelas sorteadas | evita vazamento entre janelas sobrepostas | [02](02-dataset.md) |
 | positional embedding absoluto aprendido | sinusoidal, RoPE, ALiBi | o mais simples; fiel ao GPT-2 | [03](03-embeddings.md) |
 | inicialização $\mathcal{N}(0, 0{,}02^2)$ | padrão do PyTorch | convenção do GPT-2; residual stream começa em escala pequena | [03](03-embeddings.md) |
