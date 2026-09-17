@@ -57,6 +57,7 @@ uv run python -m experiments.e14_evaluation   # precisa do modelo e do históric
 uv run python -m experiments.e15_checkpoints  # precisa dos checkpoints do train.py
 uv run python -m experiments.e16_gpu          # mais completo com os checkpoints do train.py
 uv run python -m experiments.e17_performance  # attention eficiente (SDPA) e mixed precision
+uv run python -m experiments.e18_bpe_tokenizer  # tokenizer BPE: merges, compressão, round-trip
 ```
 
 O treino salva em `checkpoints/`: `latest.pt` (a cada época), `best.pt` (menor loss de validação),
@@ -92,7 +93,7 @@ config.py            dataclasses da configuração + load_config()
 configs/tiny.yaml    configuração inicial (d_model=256, 4 heads, 8 layers)
 corpus/              texto de treino (4 romances de Machado de Assis, limpos)
 scripts/             download e limpeza do corpus
-tokenizer/           texto <-> IDs
+tokenizer/           texto <-> IDs (BPE por padrão; tokenizer por caractere como referência)
 data/                janelas (x, y), split treino/validação, DataLoaders
 model/               embeddings, attention, feed-forward, blocks, GPT, LM head
 training/            loss, training loop, métricas, checkpoints
@@ -123,6 +124,7 @@ inference.py         ponto de entrada da geração
 - [x] Checkpoints ([docs](docs/15-checkpoints.md))
 - [x] GPU ([docs](docs/16-gpu.md))
 - [x] Performance ([docs](docs/17-performance.md)) — attention eficiente (SDPA) e mixed precision; KV cache, gradient accumulation, batching, `torch.compile` e otimização de memória ficam para depois
+- [x] Tokenizer BPE ([docs](docs/18-bpe-tokenizer.md)) — subpalavras aprendidas por frequência, em vez de um token por caractere; comprime ~2,3x e evita geração cortando palavras no meio
 
 ## Licença
 

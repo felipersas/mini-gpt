@@ -6,6 +6,23 @@ from device import model_device
 from model.gpt import GPT
 
 
+def trim_trailing_partial_word(text: str) -> str:
+    """Corta a última palavra do texto, se ele não terminar numa fronteira (espaço/pontuação).
+
+    `generate` para por contagem de tokens, não de palavras: o último token pode ser só um
+    pedaço de uma palavra maior (o resto ficaria pra um token que nunca chegou a ser gerado).
+    Não tem como saber, só pelo texto, se a última palavra terminou de verdade ou foi cortada no
+    meio — as duas têm a mesma cara. Por segurança, corta sempre; na pior hipótese, perde uma
+    palavra que já estava completa.
+    """
+    if not text or not text[-1].isalnum():
+        return text
+    for i in range(len(text) - 1, -1, -1):
+        if not text[i].isalnum():
+            return text[: i + 1]
+    return text  # o texto inteiro é uma única "palavra", sem fronteira nenhuma
+
+
 def top_k_filter(logits: torch.Tensor, k: int) -> torch.Tensor:
     """Mantém os k maiores logits; os demais viram −inf (probabilidade zero)."""
     if k >= logits.shape[-1]:

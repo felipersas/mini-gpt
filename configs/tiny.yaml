@@ -4,8 +4,11 @@ data:
   corpus_path: corpus/machado_e_wikipedia.txt
   val_fraction: 0.1
   stride: 128
+  # Alvo do BPE: especiais + alfabeto do corpus + merges (docs/18-bpe-tokenizer.md). O alfabeto
+  # cresceu bastante com a Wikipedia; compressão e cobertura de context_length precisam ser
+  # remedidas depois do próximo treino, os números antigos eram do corpus só de literatura.
+  vocab_size: 4096
 
-# vocab_size não fica aqui: é definido pelo tokenizer a partir do corpus.
 model:
   context_length: 128
   d_model: 256

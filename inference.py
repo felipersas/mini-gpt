@@ -6,7 +6,7 @@ from pathlib import Path
 import torch
 
 from device import select_device
-from generation.generate import generate
+from generation.generate import generate, trim_trailing_partial_word
 from training.checkpoint import load_checkpoint
 
 ROOT = Path(__file__).parent
@@ -17,7 +17,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Gera texto com o Mini-GPT.")
     parser.add_argument("prompt", nargs="?", default="o gato", help="texto inicial")
     parser.add_argument("--checkpoint", default=DEFAULT_CHECKPOINT, help="modelo treinado")
-    parser.add_argument("--max-new-tokens", type=int, default=300, help="caracteres a gerar")
+    parser.add_argument("--max-new-tokens", type=int, default=300, help="tokens a gerar")
     parser.add_argument("--temperature", type=float, default=0.8, help="0 = greedy")
     parser.add_argument("--top-k", type=int, default=None, help="só os k mais prováveis")
     parser.add_argument("--top-p", type=float, default=0.95, help="massa de probabilidade")
@@ -44,7 +44,7 @@ def main() -> None:
         eos_id=tokenizer.vocab.eos_id,
         generator=generator,
     )
-    print(tokenizer.decode(ids))
+    print(trim_trailing_partial_word(tokenizer.decode(ids)))
 
 
 if __name__ == "__main__":

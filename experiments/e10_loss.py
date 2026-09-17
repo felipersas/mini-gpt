@@ -203,7 +203,7 @@ def rulers(
     after_training = evaluate(model.eval(), val_ids, seq_len)
 
     print("\nmelhor α de cada n-grama, comparado com outras referências:")
-    print(f"  {'régua':<36} {'loss (nats)':>11} {'perplexidade':>13} {'bits/caractere':>15}")
+    print(f"  {'régua':<36} {'loss (nats)':>11} {'perplexidade':>13} {'bits/token':>15}")
     rows = [
         (f"chute uniforme (ln {vocab_size})", math.log(vocab_size)),
         ("GPT recém-inicializado", at_init),

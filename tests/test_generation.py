@@ -2,7 +2,13 @@ import pytest
 import torch
 
 from config import ModelConfig
-from generation.generate import generate, sample_next_token, top_k_filter, top_p_filter
+from generation.generate import (
+    generate,
+    sample_next_token,
+    top_k_filter,
+    top_p_filter,
+    trim_trailing_partial_word,
+)
 from model import GPT
 
 # --- filtros ---
@@ -124,3 +130,24 @@ def test_generate_restores_training_mode(model):
 def test_empty_prompt_raises(model):
     with pytest.raises(ValueError):
         generate(model, [], 3)
+
+
+# --- trim_trailing_partial_word ---
+
+
+@pytest.mark.parametrize(
+    ("text", "trimmed"),
+    [
+        ("", ""),
+        # Nada no texto diz se "dorme" terminou de verdade ou se um token cortou ela no meio;
+        # por segurança, a última palavra sempre é cortada quando o texto termina em letra/dígito.
+        ("gato dorme", "gato "),
+        ("gato dor", "gato "),
+        ("gato.", "gato."),  # termina em pontuação: nada a cortar
+        ("gato ", "gato "),  # termina em espaço: nada a cortar
+        ("semin", "semin"),  # sem nenhuma fronteira no texto inteiro: melhor manter que zerar
+        ("gato, ca", "gato, "),
+    ],
+)
+def test_trim_trailing_partial_word(text, trimmed):
+    assert trim_trailing_partial_word(text) == trimmed

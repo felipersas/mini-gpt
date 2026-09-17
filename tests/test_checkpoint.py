@@ -5,7 +5,7 @@ from config import Config, DataConfig, ModelConfig, TrainingConfig
 from data.loader import create_dataloader
 from device import model_device
 from model import GPT
-from tokenizer import CharTokenizer
+from tokenizer import BPETokenizer
 from training.checkpoint import load_checkpoint, load_training_checkpoint, save_checkpoint
 from training.trainer import configure_optimizer, train
 
@@ -15,7 +15,7 @@ CONFIG = ModelConfig(context_length=16, d_model=16, num_heads=2, num_layers=1, d
 
 def saved_model(tmp_path):
     torch.manual_seed(0)
-    tokenizer = CharTokenizer.from_text(TEXT)
+    tokenizer = BPETokenizer.train(TEXT, vocab_size=30)
     model = GPT(CONFIG, tokenizer.vocab_size)
     path = tmp_path / "checkpoints" / "latest.pt"
     save_checkpoint(path, model, tokenizer)
@@ -59,10 +59,10 @@ TRAINING = TrainingConfig(
     gradient_clip=1.0,
     seed=1,
     log_every=1000,
-    checkpoint_every=10,
+    checkpoint_every=7,
 )
-FULL_CONFIG = Config(DataConfig("corpus.txt", 0.1, 4), TRAIN_MODEL, TRAINING)
-TOKENIZER = CharTokenizer.from_text(TEXT)
+FULL_CONFIG = Config(DataConfig("corpus.txt", 0.1, 4, 30), TRAIN_MODEL, TRAINING)
+TOKENIZER = BPETokenizer.train(TEXT, vocab_size=30)
 
 
 class Interrupted(Exception):
@@ -70,7 +70,7 @@ class Interrupted(Exception):
 
 
 def make_loaders():
-    ids = torch.tensor(TOKENIZER.encode(TEXT * 20))  # 93 janelas: 23 batches por época
+    ids = torch.tensor(TOKENIZER.encode(TEXT * 20))  # 43 janelas: 10 batches por época
     train_loader = create_dataloader(
         ids, context_length=8, stride=4, batch_size=4, shuffle=True, seed=TRAINING.seed
     )
@@ -139,12 +139,12 @@ def test_checkpoints_are_offered_periodically_and_at_every_epoch_end():
     model, optimizer = new_run()
     seen = []
     run(model, optimizer, on_checkpoint=lambda p: seen.append((p.step, p.epoch, p.batches_done)))
-    # (passo, época em andamento, batches já feitos nela); a época tem 23 batches.
-    assert seen == [(10, 1, 10), (20, 1, 20), (23, 2, 0), (30, 2, 7), (40, 2, 17), (46, 3, 0)]
+    # (passo, época em andamento, batches já feitos nela); a época tem 10 batches.
+    assert seen == [(7, 1, 7), (10, 2, 0), (14, 2, 4), (20, 3, 0)]
 
 
 @pytest.mark.parametrize("device", DEVICES)
-@pytest.mark.parametrize("stop_at_step", [23, 30])  # fim da época 1; meio da época 2
+@pytest.mark.parametrize("stop_at_step", [10, 14])  # fim da época 1; meio da época 2
 def test_resumed_training_matches_uninterrupted_training(tmp_path, stop_at_step, device):
     model, optimizer = new_run(device)
     history = run(model, optimizer)
@@ -177,7 +177,7 @@ def test_resuming_without_the_optimizer_state_changes_the_result(tmp_path):
     run(model, optimizer)
 
     path = tmp_path / "latest.pt"
-    interrupted_run(path, stop_at_step=30)
+    interrupted_run(path, stop_at_step=14)
     resumed_model, _ = resume(path, restore_optimizer=False)
 
     weights = resumed_model.state_dict()
@@ -186,26 +186,26 @@ def test_resuming_without_the_optimizer_state_changes_the_result(tmp_path):
 
 def test_training_checkpoint_restores_config_and_progress(tmp_path):
     path = tmp_path / "latest.pt"
-    interrupted_run(path, stop_at_step=30)
+    interrupted_run(path, stop_at_step=14)
     checkpoint = load_training_checkpoint(path)
     assert checkpoint.config == FULL_CONFIG
-    assert (checkpoint.progress.step, checkpoint.progress.epoch) == (30, 2)
-    assert checkpoint.progress.batches_done == len(checkpoint.progress.epoch_losses) == 7
+    assert (checkpoint.progress.step, checkpoint.progress.epoch) == (14, 2)
+    assert checkpoint.progress.batches_done == len(checkpoint.progress.epoch_losses) == 4
     assert [r.epoch for r in checkpoint.progress.history] == [1]
 
 
 def test_training_checkpoint_also_works_for_inference(tmp_path):
     path = tmp_path / "latest.pt"
-    interrupted_run(path, stop_at_step=30)
+    interrupted_run(path, stop_at_step=14)
     model, tokenizer = load_checkpoint(path)
     ids = torch.tensor([tokenizer.encode("o gato")])
-    assert model(ids).shape == (1, 6, tokenizer.vocab_size)
+    assert model(ids).shape == (1, ids.shape[1], tokenizer.vocab_size)
 
 
 @pytest.mark.skipif(len(DEVICES) == 1, reason="nenhum acelerador neste ambiente")
 def test_accelerator_checkpoint_loads_on_cpu_and_warns_when_resumed_there(tmp_path):
     path = tmp_path / "latest.pt"
-    interrupted_run(path, stop_at_step=30, device=DEVICES[1])
+    interrupted_run(path, stop_at_step=14, device=DEVICES[1])
 
     model, _ = load_checkpoint(path)
     assert model_device(model).type == "cpu"

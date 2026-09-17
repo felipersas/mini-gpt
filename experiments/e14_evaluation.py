@@ -38,7 +38,7 @@ def final_metrics(
     model: GPT, tok: CharTokenizer, train_ids, val_ids, train_loader, val_loader
 ) -> None:
     section("1. As métricas do modelo treinado")
-    print(f"  {'':<22} {'loss (nats)':>11} {'perplexidade':>13} {'bits/caractere':>15}")
+    print(f"  {'':<22} {'loss (nats)':>11} {'perplexidade':>13} {'bits/token':>15}")
     losses = {}
     for name, loader in [("treino, sem dropout", train_loader), ("validação", val_loader)]:
         loss = evaluate(model, loader)
