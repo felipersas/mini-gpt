@@ -8,7 +8,7 @@
 
   <!-- Title -->
   <text x="40" y="70" font-size="52" font-weight="bold" fill="black">Mini-GPT</text>
-  <text x="40" y="105" font-size="22" fill="#444">6.371.840 parâmetros</text>
+  <text x="40" y="105" font-size="22" fill="#444">7.391.744 parâmetros</text>
 
   <!-- Outer container (embeddings through LM head) -->
   <rect x="150" y="230" width="480" height="1160" rx="24" fill="#d9d9d9" stroke="black" stroke-width="2"/>
@@ -98,7 +98,7 @@
 
   <!-- callout: vocabulary size -->
   <line x1="440" y1="190" x2="610" y2="150" stroke="black" stroke-width="2" stroke-dasharray="6,4"/>
-  <text x="615" y="145" font-size="20" font-weight="bold" fill="black">Vocabulário de <tspan fill="#1f5c8b">112</tspan> tokens</text>
+  <text x="615" y="145" font-size="20" font-weight="bold" fill="black">Vocabulário de <tspan fill="#1f5c8b">4.096</tspan> tokens</text>
 
   <!-- callout: heads -->
   <line x1="550" y1="993" x2="700" y2="960" stroke="black" stroke-width="2" stroke-dasharray="6,4"/>

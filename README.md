@@ -7,13 +7,14 @@ entender exatamente o que acontece dentro de um modelo de linguagem quando ele r
 Cada componente (tokenizer, attention, feed-forward, training loop, checkpoints, suporte a
 GPU...) foi construído, testado e documentado separadamente, com a matemática explicada passo a
 passo e números reais medidos no próprio modelo. Treina em CPU, CUDA ou MPS (GPU da Apple), sobre
-um corpus em português: quatro romances de Machado de Assis (domínio público).
+um corpus em português: quatro romances de Machado de Assis (domínio público) mais um recorte da
+Wikipedia em português.
 
 ```
 $ uv run python inference.py "Capitú"
-Capitú erguia a opinião de fim de prender outras palavras e fui ver a possibilidade dos seus meus
-sujeitos. A mãe de Sophia não era conhecida de mim mesmo especial e a palavra do raciocinio. O
-mais foi para elle se tirar a explicação do poder, e fitava-a a si mesma...
+Capitú de Santos, os olhos de todos os a outros, e de da mulher. A senhora foi a que tinha a
+vontade, entre os filhos, o pae, e as delle, a principio das mulheres, a pouco amanhães e a alma
+do logar, e o pae o logar que viesse a ser fechado no sonho da vida, que viera ao sangue...
 ```
 
 ## Arquitetura
@@ -31,11 +32,14 @@ Requer [uv](https://docs.astral.sh/uv/). O projeto fixa Python 3.12 (`.python-ve
 
 ```bash
 uv sync                  # cria .venv e instala as dependências
-uv run python train.py   # treinamento (~5–8 min na CPU), salva checkpoints/
+uv run python train.py   # treinamento (minutos a horas, depende do corpus e do device), salva checkpoints/
 uv run pytest            # testes
 uv run ruff check .      # lint
 uv run ruff format .     # formatação
 ```
+
+Um checkpoint já treinado (BPE, corpus atual) vem em `checkpoints/best.pt` e `checkpoints/latest.pt`
+— `inference.py` funciona direto, sem precisar treinar primeiro.
 
 Cada componente tem um experimento em `experiments/`, rodado como módulo:
 
@@ -72,12 +76,12 @@ uv run python train.py --resume checkpoints/latest.pt --epochs 40  # treina mais
 uv run python train.py --device cpu                                # força CPU (padrão: auto)
 ```
 
-O corpus (*Dom Casmurro*, *Memórias Póstumas de Brás Cubas*, *Quincas Borba* e *Esaú e Jacó*, de
-Machado de Assis, domínio público) já está em `corpus/machado_de_assis.txt`. Para regenerá-lo a
-partir do Project Gutenberg:
+O corpus de treino (`configs/tiny.yaml`: `corpus/machado_e_wikipedia.txt`) combina dois textos, já
+prontos no repositório:
 
 ```bash
-uv run python scripts/prepare_corpus.py
+uv run python scripts/prepare_corpus.py                              # 4 romances de Machado de Assis (Project Gutenberg)
+uv run --group data python scripts/prepare_wikipedia_corpus.py       # recorte da Wikipedia em português
 ```
 
 `requirements.txt` é gerado a partir do `uv.lock` para quem preferir pip:
@@ -91,7 +95,7 @@ uv export --no-dev --no-hashes --format requirements-txt -o requirements.txt
 ```text
 config.py            dataclasses da configuração + load_config()
 configs/tiny.yaml    configuração inicial (d_model=256, 4 heads, 8 layers)
-corpus/              texto de treino (4 romances de Machado de Assis, limpos)
+corpus/              texto de treino (4 romances de Machado de Assis + recorte da Wikipedia, limpos)
 scripts/             download e limpeza do corpus
 tokenizer/           texto <-> IDs (BPE por padrão; tokenizer por caractere como referência)
 data/                janelas (x, y), split treino/validação, DataLoaders
@@ -124,7 +128,7 @@ inference.py         ponto de entrada da geração
 - [x] Checkpoints ([docs](docs/15-checkpoints.md))
 - [x] GPU ([docs](docs/16-gpu.md))
 - [x] Performance ([docs](docs/17-performance.md)) — attention eficiente (SDPA) e mixed precision; KV cache, gradient accumulation, batching, `torch.compile` e otimização de memória ficam para depois
-- [x] Tokenizer BPE ([docs](docs/18-bpe-tokenizer.md)) — subpalavras aprendidas por frequência, em vez de um token por caractere; comprime ~2,3x e evita geração cortando palavras no meio
+- [x] Tokenizer BPE ([docs](docs/18-bpe-tokenizer.md)) — subpalavras aprendidas por frequência, em vez de um token por caractere; comprime ~2,1x e evita geração cortando palavras no meio
 
 ## Licença
 
