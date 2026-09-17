@@ -46,9 +46,9 @@ Termos usados daqui em diante:
 
 ### Uma analogia
 
-`CharTokenizer` é como escrever um texto letra por letra num teclado que só tem 97 teclas, uma
+`CharTokenizer` é como escrever um texto letra por letra num teclado que só tem 1.130 teclas, uma
 por caractere. `BPETokenizer` é como ganhar teclas extras para as combinações mais usadas: uma
-tecla só para "que", outra para "ção", outra para "Capitú" — as 3.984 combinações mais frequentes
+tecla só para "que", outra para "ção", outra para "Capitú" — as 2.962 combinações mais frequentes
 do corpus, uma tecla por vez. Digitar "coração" ainda é possível letra por letra se for preciso
 (o alfabeto original continua lá), mas na prática sai numa tecla só. Quanto mais um pedaço de
 texto se repete no material de treino, mais cedo ele ganha sua própria tecla — é por isso que
@@ -58,18 +58,18 @@ texto se repete no material de treino, mais cedo ele ganha sua própria tecla �
 
 | | o quê | exemplo |
 |---|---|---|
-| entra | o corpus (texto bruto) | `corpus/machado_de_assis.txt`, 1.595.426 caracteres |
+| entra | o corpus (texto bruto) | `corpus/machado_e_wikipedia.txt`, 16.729.864 caracteres |
 | entra | `vocab_size` alvo (`data.vocab_size` na config) | 4.096 |
-| sai | um alfabeto + uma lista ordenada de merges | 108 caracteres + 3.984 merges |
+| sai | um alfabeto + uma lista ordenada de merges | 1.130 caracteres + 2.962 merges |
 | sai | `encode`/`decode`, como qualquer tokenizer do projeto | texto ↔ IDs |
-| sai | uma taxa de compressão | 2,29 caracteres/token neste corpus |
+| sai | uma taxa de compressão | 2,10 caracteres/token neste corpus |
 
 ### Onde isso entra no pipeline
 
 ```text
-corpus/machado_de_assis.txt
+corpus/machado_e_wikipedia.txt
   │
-  │  BPETokenizer.train(text, vocab_size)     ← este documento; ~9 s no corpus inteiro
+  │  BPETokenizer.train(text, vocab_size)     ← este documento; ~15 s no corpus inteiro
   ▼
 tokenizer.encode(text) -> ids                  ← mesma interface do CharTokenizer
   │
@@ -102,10 +102,10 @@ junto com `vocab`, para que um checkpoint continue se bastando sozinho
 | termo | como se lê | o que significa | no `tiny.yaml` | no código |
 |---|---|---|---|---|
 | `vocab_size` (alvo) | | especiais + alfabeto + merges desejados | 4.096 | `data.vocab_size` |
-| alfabeto | | quantos caracteres distintos existem no corpus | 108 | `base_chars` |
-| merge | | um par de símbolos fundido num só, na ordem aprendida | 3.984 | `tokenizer.merges` |
+| alfabeto | | quantos caracteres distintos existem no corpus | 1.130 | `base_chars` |
+| merge | | um par de símbolos fundido num só, na ordem aprendida | 2.962 | `tokenizer.merges` |
 | rank | "posição do merge" | quão cedo um merge foi aprendido; ranks menores vencem no encode | | `self._merge_rank` |
-| compressão | | caracteres por token, em média | 2,29 | `len(texto) / len(ids)` |
+| compressão | | caracteres por token, em média | 2,10 | `len(texto) / len(ids)` |
 | pré-tokenização | | separar o texto em letras / dígitos / pontuação / espaço antes de aprender merges | | `_WORD_PATTERN` |
 
 ---
@@ -128,41 +128,44 @@ for _ in range(num_merges):
     _apply_merge_everywhere(best_pair, merged_token, ...)
 ```
 
-Seção 1 do experimento, no corpus inteiro:
+Seção 1 do experimento, no corpus inteiro (agora Machado de Assis + Wikipedia,
+[02-dataset.md](02-dataset.md)):
 
 ```text
-  1,595,426 caracteres | alvo vocab_size 4096 | treino em 9.4s
-  alfabeto: 108 caracteres | merges aprendidos: 3984
+  16,729,864 caracteres | alvo vocab_size 4096 | treino em 14.6s
+  alfabeto: 1130 caracteres | merges aprendidos: 2962
   vocab_size real: 4096
 
   primeiros 10 merges (os pares mais frequentes do corpus inteiro):
     ('d', 'e') -> 'de'
     ('r', 'a') -> 'ra'
-    ('o', 's') -> 'os'
-    ('a', 's') -> 'as'
-    ('q', 'u') -> 'qu'
-    ('e', 's') -> 'es'
     ('d', 'o') -> 'do'
-    ('qu', 'e') -> 'que'
-    ('s', 'e') -> 'se'
+    ('e', 's') -> 'es'
+    ('n', 't') -> 'nt'
+    ('d', 'a') -> 'da'
     ('c', 'o') -> 'co'
+    ('e', 'r') -> 'er'
+    ('a', 's') -> 'as'
+    ('o', 's') -> 'os'
 
   10 merges por volta do meio (menos óbvios, mais específicos):
-    ('re', 'corda') -> 'recorda'
-    ('quel', 'les') -> 'quelles'
-    ('pu', 'desse') -> 'pudesse'
-    ('n', 'este') -> 'neste'
-    ('mando', 'u') -> 'mandou'
+    ('Car', 'los') -> 'Carlos'
+    ('ér', 'ica') -> 'érica'
+    ('a', 'gora') -> 'agora'
+    ('Pa', 'ul') -> 'Paul'
+    ('T', 'amb') -> 'Tamb'
 ```
 
-- **Os primeiros merges são pares de letras**, não palavras: "de", "ra", "os" são fragmentos
-  baratos e frequentíssimos (aparecem dentro de muitas palavras diferentes). Só depois de
-  combinados repetidamente é que formam palavras inteiras como "que" (o oitavo merge: primeiro
-  "qu", depois "qu"+"e").
-- **Os merges do meio já são pedaços de palavras específicas** ("recorda", "pudesse", "mandou") —
-  o vocabulário vai de "letras que se repetem em qualquer lugar" para "palavras que se repetem
-  neste corpus", exatamente como esperado de uma lista ordenada por frequência.
-- **9,4 segundos para quase 4 mil merges**, porque cada merge só atualiza as palavras que o
+- **Os primeiros merges são pares de letras**, não palavras: "de", "ra", "do" são fragmentos
+  baratos e frequentíssimos (aparecem dentro de muitas palavras diferentes).
+- **Os merges do meio já são pedaços de palavras e nomes próprios específicos** ("Carlos", "Paul",
+  "agora") — nomes próprios aparecem bastante nos artigos biográficos da Wikipedia, então entram
+  cedo na lista.
+- **O alfabeto saltou de 108 para 1.130 caracteres** com a Wikipedia: nomes estrangeiros, símbolos
+  e pontuação que a literatura do século XIX não usa. Isso consome uma fatia bem maior do
+  `vocab_size` de 4.096 antes mesmo do primeiro merge — por isso sobram 2.962 merges agora, contra
+  3.984 antes, e a compressão cai um pouco (seção 4).
+- **14,6 segundos para quase 3 mil merges**, porque cada merge só atualiza as palavras que o
   contêm (seção "Por que é rápido" abaixo) em vez de recontar o corpus inteiro a cada passo — o
   bastante para treinar de novo a cada `train.py`, sem precisar salvar um artefato à parte.
 
@@ -181,9 +184,9 @@ def _apply_merge_everywhere(pair, merged, symbols_by_word, word_counts, pair_cou
         ...                           # soma as contagens novas dessa palavra
 ```
 
-Como o corpus tem 42.680 palavras **únicas** (repetições não contam de novo) e a maioria dos
+Como o corpus tem 159.792 palavras **únicas** (repetições não contam de novo) e a maioria dos
 merges afeta só uma fração pequena delas, cada passo custa muito menos que revisitar tudo — é a
-diferença entre 9,4 s e alguns minutos.
+diferença entre 14,6 s e alguns minutos.
 
 ---
 
@@ -196,16 +199,17 @@ Seção 2 do experimento:
   'que'                -> ['que']  (um token só: sim)
   'não'                -> ['não']  (um token só: sim)
   'Capitú'             -> ['Capitú']  (um token só: sim)
-  'coração'            -> ['coração']  (um token só: sim)
-  'escrivaninha'       -> ['es', 'cri', 'van', 'inha']  (um token só: não)
+  'coração'            -> ['co', 'ração']  (um token só: não)
+  'escrivaninha'       -> ['escri', 'van', 'inha']  (um token só: não)
   'retroactivamente'   -> ['re', 'tro', 'ac', 'tivamente']  (um token só: não)
 ```
 
-Palavras muito frequentes no corpus (artigos, "Capitú", "coração" — um tema central do livro)
-ganharam merges suficientes para virar um token inteiro. Palavras raras ("escrivaninha" aparece
-poucas vezes) não acumularam merges a ponto de se fundir por completo, e saem como uma sequência
-de pedaços — ainda assim pedaços maiores que letras soltas ("es", "cri", "van", "inha"), não
-caractere por caractere.
+Palavras muito frequentes no corpus inteiro (artigos, "Capitú") ganharam merges suficientes para
+virar um token inteiro. "Coração" era um token só quando o corpus era só os 4 romances — um tema
+central do livro —, mas na mistura com a Wikipedia (16x maior, majoritariamente enciclopédica) sua
+frequência relativa caiu, e ela para em 2 pedaços. Palavras raras ("escrivaninha") continuam saindo
+como uma sequência de pedaços maiores que letras soltas ("escri", "van", "inha"), não caractere
+por caractere.
 
 `_encode_word` aplica os merges na **ordem em que foram aprendidos** (por rank, não pela posição
 no texto): a cada passo, funde o par de menor rank disponível, até sobrar um símbolo só ou não
@@ -226,20 +230,22 @@ _WORD_PATTERN = re.compile(r"\s+|[^\W\d]+|\d+|[^\w\s]+")
 Seção 3 do experimento:
 
 ```text
-  'gato'   -> ['gato']
-  'gato.'  -> ['gato', '.']
-  'gato,'  -> ['gato', ',']
-  'gato!'  -> ['gato', '!']
-  'gato?'  -> ['gato', '?']
+  'gato'   -> ['ga', 'to']
+  'gato.'  -> ['ga', 'to', '.']
+  'gato,'  -> ['ga', 'to', ',']
+  'gato!'  -> ['ga', 'to', '!']
+  'gato?'  -> ['ga', 'to', '?']
 ```
 
-Sem essa separação, o par mais frequente aprendido cedo poderia facilmente ser "o"+"." (fim de
-frase é comum), e a partir daí o BPE aprenderia "gato" e "gato." como **duas palavras
-completamente diferentes**, cada uma exigindo seus próprios merges — a mesma raiz do problema que
-[15-checkpoints.md](15-checkpoints.md) descreveu para o vocabulário do tokenizer por caracteres
-(um corpus novo desloca todos os IDs), só que multiplicada por toda combinação de palavra +
-pontuação do corpus. Separar a pontuação faz "gato" (e seu merge) valer para qualquer frase em
-que a palavra aparece.
+"Gato" agora sai em 2 pedaços em vez de 1 (a Wikipedia diluiu sua frequência, como "coração" na
+seção 2) — mas o ponto desta seção não muda: os mesmos dois pedaços, `'ga'` e `'to'`, aparecem
+**idênticos** nas 5 variações, e a pontuação sempre sai como token à parte. Sem essa separação, o
+par mais frequente aprendido cedo poderia facilmente ser "o"+"." (fim de frase é comum), e a
+partir daí o BPE aprenderia "gato" e "gato." como **palavras completamente diferentes**, cada uma
+exigindo seus próprios merges — a mesma raiz do problema que [15-checkpoints.md](15-checkpoints.md)
+descreveu para o vocabulário do tokenizer por caracteres (um corpus novo desloca todos os IDs), só
+que multiplicada por toda combinação de palavra + pontuação do corpus. Separar a pontuação faz os
+merges de "gato" valerem para qualquer frase em que a palavra aparece, com ou sem pontuação atrás.
 
 ---
 
@@ -248,17 +254,19 @@ que a palavra aparece.
 Seção 4 do experimento:
 
 ```text
-  corpus inteiro: 1,595,426 caracteres
-  CharTokenizer:  1,595,426 tokens (1,00 caractere/token, por definição)
-  BPETokenizer:   696,142 tokens (2.29 caracteres/token)
-  context_length=128: CharTokenizer cobre 128 caracteres | BPETokenizer cobre ~293 caracteres
-  context_length=256: CharTokenizer cobre 256 caracteres | BPETokenizer cobre ~587 caracteres
+  corpus inteiro: 16,729,864 caracteres
+  CharTokenizer:  16,729,864 tokens (1,00 caractere/token, por definição)
+  BPETokenizer:   7,980,360 tokens (2.10 caracteres/token)
+  context_length=128: CharTokenizer cobre 128 caracteres | BPETokenizer cobre ~268 caracteres
+  context_length=256: CharTokenizer cobre 256 caracteres | BPETokenizer cobre ~537 caracteres
 ```
 
-**O mesmo `context_length: 128` do `tiny.yaml` passa a cobrir ~293 caracteres em vez de 128** —
-mais que o dobro — sem mudar nenhum hiperparâmetro do modelo (`d_model`, `num_layers`, etc.) e
-sem aumentar o custo quadrático da attention, porque o número de *posições* que o modelo processa
-continua sendo 128. A compressão é "de graça": o mesmo tensor `[B, T, d]`, cobrindo mais texto.
+**O mesmo `context_length: 128` do `tiny.yaml` passa a cobrir ~268 caracteres em vez de 128** —
+mais que o dobro, ainda que menos que os ~293 de antes da Wikipedia (o alfabeto maior deixa menos
+`vocab_size` para merges, seção 1) — sem mudar nenhum hiperparâmetro do modelo (`d_model`,
+`num_layers`, etc.) e sem aumentar o custo quadrático da attention, porque o número de *posições*
+que o modelo processa continua sendo 128. A compressão é "de graça": o mesmo tensor `[B, T, d]`,
+cobrindo mais texto.
 
 ---
 
@@ -267,14 +275,14 @@ continua sendo 128. A compressão é "de graça": o mesmo tensor `[B, T, d]`, co
 Seção 5 do experimento:
 
 ```text
-  'gato 🐱' -> [4001, 5, 1]
+  'gato 🐱' -> [1305, 1166, 6, 1]
   decode: 'gato <UNK>'
   o emoji não existe no alfabeto do corpus (só português + pontuação usual)
 ```
 
 Igual ao [`CharTokenizer`](01-tokenizer.md): um caractere fora do alfabeto vira `<UNK>` — o
 `Vocab.get_id` (compartilhado pelos dois tokenizers) já faz isso automaticamente. A diferença é
-só de escala: o alfabeto do `CharTokenizer` é qualquer caractere que apareça no corpus (108
+só de escala: o alfabeto do `CharTokenizer` é qualquer caractere que apareça no corpus (1.130
 aqui), e o mesmo vale para o alfabeto **base** do BPE — os merges nunca criam um caractere novo,
 só combinam os que já existem.
 
@@ -286,7 +294,7 @@ Seção 6 do experimento:
 
 ```text
   decode(encode(corpus)) == corpus: True
-  (1,595,426 caracteres -> 696,142 tokens -> 1,595,426 caracteres)
+  (16,729,864 caracteres -> 7,980,360 tokens -> 16,729,864 caracteres)
 ```
 
 A pré-tokenização (seção 3) é uma partição exaustiva do texto — todo caractere pertence a
@@ -304,10 +312,10 @@ só), mas não o elimina: uma palavra rara como "escrivaninha" ainda é 4 tokens
 a geração pare bem no último deles. Seção 7 do experimento:
 
 ```text
-  'a escrivaninha' -> ['a', ' ', 'es', 'cri', 'van', 'inha']
-  parando em 3 tokens: 'a es'                 -> trim: 'a '
-  parando em 4 tokens: 'a escri'              -> trim: 'a '
-  parando em 6 tokens: 'a escrivaninha'       -> trim: 'a '
+  'a escrivaninha' -> ['a', ' ', 'escri', 'van', 'inha']
+  parando em 3 tokens: 'a escri'              -> trim: 'a '
+  parando em 4 tokens: 'a escrivan'           -> trim: 'a '
+  parando em 5 tokens: 'a escrivaninha'       -> trim: 'a '
 ```
 
 ```python
@@ -389,9 +397,9 @@ Não há uma flag de linha de comando para `vocab_size`: como `corpus_path`, é 
    de Sennrich et al. (2015) — o mesmo princípio usado por GPT-2 e GPT-3.
 2. A pré-tokenização separa letras, dígitos, espaço e pontuação em blocos que nunca se misturam,
    para que "gato" e "gato." aprendam o mesmo primeiro token em vez de vocabulários diferentes.
-3. Medido no corpus dos 4 romances: 108 caracteres de alfabeto, 3.984 merges, treino em 9,4 s,
-   compressão de 2,29 caracteres/token — `context_length: 128` passa a cobrir ~293 caracteres, o
-   dobro de antes, sem mudar o custo da attention.
+3. Medido no corpus completo (4 romances + Wikipedia): 1.130 caracteres de alfabeto, 2.962 merges,
+   treino em 14,6 s, compressão de 2,10 caracteres/token — `context_length: 128` passa a cobrir
+   ~268 caracteres, mais que o dobro de antes, sem mudar o custo da attention.
 4. `decode(encode(texto)) == texto` sempre, porque a pré-tokenização é uma partição exaustiva do
    texto e nenhum merge descarta informação — só muda como um trecho é representado por dentro.
 5. BPE reduz, mas não elimina, o corte de palavra na geração: palavras raras continuam sendo
@@ -410,7 +418,7 @@ Não há uma flag de linha de comando para `vocab_size`: como `corpus_path`, é 
    diferente no corpus de treino para essa palavra virar um único token?
 3. Por que a pré-tokenização impede que `"gato"` e `"gato."` aprendam vocabulários totalmente
    separados? O que aconteceria com o número de merges "úteis" se a pontuação não fosse separada?
-4. `context_length: 128` passou a cobrir ~293 caracteres em vez de 128, sem mudar `d_model` nem
+4. `context_length: 128` passou a cobrir ~268 caracteres em vez de 128, sem mudar `d_model` nem
    `num_layers`. De onde vem esse ganho — o modelo ficou "mais inteligente" ou é outra coisa?
 5. Por que `decode(encode(texto)) == texto` vale sempre, mesmo para um texto que o BPE nunca viu
    no treino (fora os caracteres desconhecidos, que viram `<UNK>`)?
@@ -424,5 +432,5 @@ Não há uma flag de linha de comando para `vocab_size`: como `corpus_path`, é 
 9. Por que treinar o BPE de novo a cada `uv run python train.py` (em vez de treinar uma vez e
    salvar um arquivo à parte) é uma escolha razoável aqui, e o que teria que mudar no corpus para
    essa escolha deixar de fazer sentido?
-10. Rodando `CharTokenizer.from_text` no mesmo corpus de 4 romances, o `vocab_size` dá 112. O
-    alfabeto do BPE (seção 1) tem 108. Por que a diferença é exatamente 4?
+10. Rodando `CharTokenizer.from_text` no mesmo corpus, o `vocab_size` dá 1.134. O alfabeto do BPE
+    (seção 1) tem 1.130. Por que a diferença é exatamente 4?
